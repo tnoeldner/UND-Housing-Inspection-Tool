@@ -564,55 +564,59 @@ def main():
                         "notes": notes
                     })
             
-            # Generate email HTML with ONLY inline styles - NO CSS classes
-            email_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; background-color: #ffffff; padding: 20px;">
-
-<div style="background-color: #009A44; color: white; padding: 20px; text-align: center; margin-bottom: 20px; border-radius: 8px;">
-<h1 style="margin: 0; font-size: 24px; font-weight: bold; color: white;">{st.session_state.inspection_type} Inspection Report</h1>
-</div>
-
-<div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #e9ecef;">
-<p style="margin: 5px 0; color: #333;"><strong>Building:</strong> {building}</p>
-<p style="margin: 5px 0; color: #333;"><strong>Inspector:</strong> {inspector}</p>
-<p style="margin: 5px 0; color: #333;"><strong>Date:</strong> {inspection_date}</p>
-</div>
-
-<h2 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px; margin: 20px 0 15px 0;">Inspection Details</h2>
-"""
+            # Generate COMPLETELY NEW email HTML - ZERO CSS classes allowed!
+            email_html = f'<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>'
+            email_html += f'<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; background-color: #ffffff; padding: 20px;">'
+            email_html += f'<div style="background-color: #009A44; color: white; padding: 20px; text-align: center; margin-bottom: 20px; border-radius: 8px;">'
+            email_html += f'<h1 style="margin: 0; font-size: 24px; font-weight: bold; color: white;">{st.session_state.inspection_type} Inspection Report</h1>'
+            email_html += f'</div>'
+            email_html += f'<div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #e9ecef;">'
+            email_html += f'<p style="margin: 5px 0; color: #333;"><strong>Building:</strong> {building}</p>'
+            email_html += f'<p style="margin: 5px 0; color: #333;"><strong>Inspector:</strong> {inspector}</p>'
+            email_html += f'<p style="margin: 5px 0; color: #333;"><strong>Date:</strong> {inspection_date}</p>'
+            email_html += f'</div>'
+            email_html += f'<h2 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px; margin: 20px 0 15px 0;">Inspection Details</h2>'
             
             for detail in details:
-                email_html += f"""
-                <div style="padding: 10px; margin: 8px 0; background-color: #f9f9f9; border-left: 4px solid #009A44; border-radius: 4px;">
-                    <strong style="color: #333;">{detail['item']}:</strong> <span style="color: #009A44; font-weight: bold;">{detail['rating']}</span>
-                    {f'<div style="font-style: italic; color: #666; margin-left: 15px; margin-top: 5px;"><strong>Notes:</strong> {detail["notes"]}</div>' if detail['notes'] else ''}
-                </div>
-                """
+                email_html += f'<div style="padding: 10px; margin: 8px 0; background-color: #f9f9f9; border-left: 4px solid #009A44; border-radius: 4px;">'
+                email_html += f'<strong style="color: #333;">{detail["item"]}:</strong> <span style="color: #009A44; font-weight: bold;">{detail["rating"]}</span>'
+                if detail['notes']:
+                    email_html += f'<div style="font-style: italic; color: #666; margin-left: 15px; margin-top: 5px;"><strong>Notes:</strong> {detail["notes"]}</div>'
+                email_html += f'</div>'
             
             if hasattr(st.session_state, 'ai_report'):
                 # Convert markdown formatting to HTML
                 formatted_ai_report = convert_markdown_to_html(st.session_state.ai_report)
                 
-                email_html += f"""
-<h3 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px; margin-top: 30px;">AI Analysis & APPA Assessment</h3>
-<div style="background-color: #f8f9fa; padding: 20px; border-left: 6px solid #009A44; line-height: 1.8; border-radius: 6px; margin: 15px 0; font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-{formatted_ai_report}
-</div>
-"""
+
+                
+                email_html += f'<h3 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px; margin-top: 30px;">AI Analysis & APPA Assessment</h3>'
+                email_html += f'<div style="background-color: #f8f9fa; padding: 20px; border-left: 6px solid #009A44; line-height: 1.8; border-radius: 6px; margin: 15px 0; font-family: Arial, sans-serif; font-size: 14px; color: #333;">'
+                email_html += formatted_ai_report
+                email_html += f'</div>'
             
             # Close the HTML properly
-            email_html += """
-<p style="margin-top: 30px; font-style: italic; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
-This report was automatically generated by the UND Housing Inspection Tool.
-</p>
+            email_html += f'<p style="margin-top: 30px; font-style: italic; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">'
+            email_html += f'This report was automatically generated by the UND Housing Inspection Tool.'
+            email_html += f'</p></body></html>'
+            
 
-</body>
-</html>"""
+            
+            # Show email preview to verify formatting
+            st.subheader("📧 Email Preview")
+            st.components.v1.html(email_html, height=600, scrolling=True)
+            
+            # Verification that this is the new HTML format
+            has_css_classes = "class=" in email_html
+            st.success("✅ HTML Generation Status:")
+            st.write(f"• Uses inline styles only: {'❌ NO' if has_css_classes else '✅ YES'}")
+            st.write(f"• HTML version: v2.0-inline-styles-only")
+            st.write(f"• Character count: {len(email_html)}")
+            
+            if has_css_classes:
+                st.error("⚠️ WARNING: CSS classes detected in HTML!")
+            else:
+                st.success("🎉 Perfect! Email uses only inline styles.")
             
             submission_data = {
                 "type": st.session_state.inspection_type.lower(),
@@ -621,7 +625,17 @@ This report was automatically generated by the UND Housing Inspection Tool.
                 "inspector": inspector,
                 "aiReport": getattr(st.session_state, 'ai_report', ''),
                 "details": details,
-                "emailReportHTML": email_html
+                "emailReportHTML": email_html,
+                "htmlVersion": "v2.0-inline-styles-only",  # Force cache refresh
+                "timestamp": datetime.now().isoformat(),
+                "htmlLength": len(email_html),
+                "htmlPreview": email_html[:200] + "..." if len(email_html) > 200 else email_html,
+                "debugInfo": {
+                    "hasCSSClasses": "class=" in email_html,
+                    "hasInlineStyles": "style=" in email_html,
+                    "htmlStartsWith": email_html[:50],
+                    "submissionSource": "streamlit-app-local"
+                }
             }
             
             # Submit to multiple destinations
