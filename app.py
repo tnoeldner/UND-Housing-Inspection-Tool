@@ -304,22 +304,31 @@ def convert_markdown_to_html(text):
     if not text:
         return text
     
-    # Convert **bold** to <strong>
-    text = text.replace('**', '<strong>', 1)
-    text = text.replace('**', '</strong>', 1)
-    
-    # Handle multiple bold sections
     import re
+    
+    # First, escape any existing HTML to prevent conflicts
+    text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    
+    # Convert **SECTION:** headers to styled headers
+    text = re.sub(r'\*\*([A-Z\s]+:)\*\*', r'<h4 style="color: #009A44; margin: 15px 0 5px 0; font-size: 16px;">\1</h4>', text)
+    
+    # Convert **bold text** to <strong>
     text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
     
     # Convert line breaks to HTML
     text = text.replace('\n', '<br>')
     
-    # Handle bullet points (lines starting with •)
-    text = re.sub(r'<br>• (.*?)(?=<br>|$)', r'<br>• <strong>\1</strong>', text)
+    # Handle bullet points (lines starting with • or *)
+    text = re.sub(r'<br>[•*] (.*?)(?=<br>|$)', r'<br>• \1', text)
     
     # Handle numbered lists (lines starting with numbers)
-    text = re.sub(r'<br>(\d+\.) (.*?)(?=<br>|$)', r'<br><strong>\1</strong> \2', text)
+    text = re.sub(r'<br>(\d+)\. (.*?)(?=<br>|$)', r'<br><strong>\1.</strong> \2', text)
+    
+    # Clean up multiple consecutive <br> tags
+    text = re.sub(r'(<br>){3,}', '<br><br>', text)
+    
+    # Remove leading <br> if it exists
+    text = text.lstrip('<br>')
     
     return text
 
@@ -555,41 +564,33 @@ def main():
                         "notes": notes
                     })
             
-            # Generate email HTML with comprehensive formatting
-            email_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; }}
-                    .header {{ background-color: #009A44; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
-                    .content {{ padding: 20px; background-color: #ffffff; }}
-                    .info-section {{ background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; }}
-                    .detail-item {{ padding: 10px; margin: 8px 0; background-color: #f9f9f9; border-left: 4px solid #009A44; }}
-                    .notes {{ font-style: italic; color: #666; margin-left: 15px; margin-top: 5px; }}
-                    hr {{ border: 1px solid #ddd; margin: 25px 0; }}
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1 style="margin: 0; font-size: 24px;">{st.session_state.inspection_type} Evaluation Report</h1>
-                </div>
-                <div class="content">
-                    <div class="info-section">
-                        <p><strong>Building/Area:</strong> {building}</p>
-                        <p><strong>Inspection Date:</strong> {inspection_date}</p>
-                        <p><strong>Submission Date:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                        <p><strong>Inspector:</strong> {inspector}</p>
-                    </div>
-                    
-                    <h3 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px;">Inspection Details</h3>
-            """
+            # Generate email HTML with ONLY inline styles - NO CSS classes
+            email_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; background-color: #ffffff; padding: 20px;">
+
+<div style="background-color: #009A44; color: white; padding: 20px; text-align: center; margin-bottom: 20px; border-radius: 8px;">
+<h1 style="margin: 0; font-size: 24px; font-weight: bold; color: white;">{st.session_state.inspection_type} Inspection Report</h1>
+</div>
+
+<div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #e9ecef;">
+<p style="margin: 5px 0; color: #333;"><strong>Building:</strong> {building}</p>
+<p style="margin: 5px 0; color: #333;"><strong>Inspector:</strong> {inspector}</p>
+<p style="margin: 5px 0; color: #333;"><strong>Date:</strong> {inspection_date}</p>
+</div>
+
+<h2 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px; margin: 20px 0 15px 0;">Inspection Details</h2>
+"""
             
             for detail in details:
                 email_html += f"""
-                <div class="detail-item">
-                    <strong>{detail['item']}:</strong> {detail['rating']}
-                    {f'<div class="notes">Notes: {detail["notes"]}</div>' if detail['notes'] else ''}
+                <div style="padding: 10px; margin: 8px 0; background-color: #f9f9f9; border-left: 4px solid #009A44; border-radius: 4px;">
+                    <strong style="color: #333;">{detail['item']}:</strong> <span style="color: #009A44; font-weight: bold;">{detail['rating']}</span>
+                    {f'<div style="font-style: italic; color: #666; margin-left: 15px; margin-top: 5px;"><strong>Notes:</strong> {detail["notes"]}</div>' if detail['notes'] else ''}
                 </div>
                 """
             
@@ -598,19 +599,20 @@ def main():
                 formatted_ai_report = convert_markdown_to_html(st.session_state.ai_report)
                 
                 email_html += f"""
-                    <hr>
-                    <h3 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px;">AI Analysis & APPA Assessment</h3>
-                    <div style="background-color: #f8f9fa; padding: 20px; border-left: 6px solid #009A44; line-height: 1.8; border-radius: 6px; margin: 15px 0; font-size: 14px;">
-                        {formatted_ai_report}
-                    </div>
-                """
+<h3 style="color: #009A44; border-bottom: 2px solid #009A44; padding-bottom: 8px; margin-top: 30px;">AI Analysis & APPA Assessment</h3>
+<div style="background-color: #f8f9fa; padding: 20px; border-left: 6px solid #009A44; line-height: 1.8; border-radius: 6px; margin: 15px 0; font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+{formatted_ai_report}
+</div>
+"""
             
             # Close the HTML properly
             email_html += """
-                </div>
-            </body>
-            </html>
-            """
+<p style="margin-top: 30px; font-style: italic; color: #666; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
+This report was automatically generated by the UND Housing Inspection Tool.
+</p>
+
+</body>
+</html>"""
             
             submission_data = {
                 "type": st.session_state.inspection_type.lower(),
