@@ -604,19 +604,7 @@ def main():
             
             # Show email preview to verify formatting
             st.subheader("📧 Email Preview")
-            st.components.v1.html(email_html, height=600, scrolling=True)
-            
-            # Verification that this is the new HTML format
-            has_css_classes = "class=" in email_html
-            st.success("✅ HTML Generation Status:")
-            st.write(f"• Uses inline styles only: {'❌ NO' if has_css_classes else '✅ YES'}")
-            st.write(f"• HTML version: v2.0-inline-styles-only")
-            st.write(f"• Character count: {len(email_html)}")
-            
-            if has_css_classes:
-                st.error("⚠️ WARNING: CSS classes detected in HTML!")
-            else:
-                st.success("🎉 Perfect! Email uses only inline styles.")
+            st.components.v1.html(email_html, height=400, scrolling=True)
             
             submission_data = {
                 "type": st.session_state.inspection_type.lower(),
