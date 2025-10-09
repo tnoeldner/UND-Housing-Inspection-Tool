@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>University Housing Inspection Tool</title>
+    <meta name="theme-color" content="#009A44">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="UND Inspections">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23009A44'/%3E%3Ctext x='50' y='55' font-family='Arial' font-size='60' fill='white' text-anchor='middle'%3E✓%3C/text%3E%3C/svg%3E">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: University of North Dakota Branding -->
+    <!-- Application Structure Plan: A task-oriented SPA with three primary views, 'Custodial', 'Maintenance', and 'Grounds', toggled by top-level buttons. This structure directly mirrors the user's goal of performing one of three distinct inspection types. Each view contains an interactive checklist where users can select ratings from dropdowns, add notes, and receive instant visual feedback (contextual descriptions). A final 'Submit & Email' function provides a clear, actionable output. This design was chosen to transform static checklists into an efficient, user-friendly digital workflow. -->
+    <!-- Visualization & Content Choices: Checklist -> Goal: Standardize evaluation -> Method: Interactive HTML form with dropdowns for APPA Levels 1-5 -> Interaction: Selecting a level dynamically displays its official description for inspector reference. Justification: Provides crucial context and ensures consistent scoring. General -> Goal: Export findings -> Method: HTML/JS 'Submit & Email' button -> Interaction: Gathers all form data, saves to SharePoint, and sends a formatted HTML email. Justification: Creates a tangible, shareable output for record-keeping and action plans. CONFIRMED: No SVG/Mermaid used; all visuals are HTML/CSS. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* UND Gray accent */
+        }
+        @import url('https://rsms.me/inter/inter.css');
+        .nav-button {
+            transition: all 0.3s ease;
+        }
+        .nav-button.active {
+            background-color: #009A44; /* UND Green */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .gemini-btn {
+            background-color: #e5e7eb; /* Gray-200 */
+            color: #1f2937; /* Gray-800 */
+            border: 1px solid #d1d5db; /* Gray-300 */
+        }
+        .gemini-btn:hover {
+            background-color: #d1d5db; /* Gray-300 */
+        }
+        .gemini-btn:disabled {
+            background-color: #e5e7eb;
+            color: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .error-message {
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        .success-message {
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            margin-top: 4px;
+        }
+        
+        /* Mobile Optimizations */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .nav-button {
+                font-size: 0.875rem;
+                padding: 0.75rem 1rem;
+                flex-grow: 1;
+                text-align: center;
+            }
+            
+            .checklist-item {
+                padding: 1rem;
+                margin-bottom: 1rem;
+                border-radius: 0.5rem;
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+            }
+            
+            .checklist-item label {
+                font-size: 0.9rem;
+                line-height: 1.3;
+                display: block;
+                margin-bottom: 0.5rem;
+            }
+            
+            .help-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 0.75rem;
+                margin-left: 0.5rem;
+                flex-shrink: 0;
+            }
+            
+            select, input, textarea {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 0.75rem;
+                border-radius: 0.375rem;
+            }
+            
+            .gemini-btn {
+                font-size: 1rem;
+                padding: 1rem;
+                min-height: 48px; /* Touch target size */
+                border-radius: 0.5rem;
+            }
+            
+            .modal-content {
+                margin: 1rem;
+                max-height: 80vh;
+                border-radius: 1rem;
+            }
+            
+            #submit-and-email {
+                font-size: 1.1rem;
+                padding: 1rem 2rem;
+                min-height: 56px;
+                border-radius: 0.75rem;
+            }
+            
+            /* Sticky navigation for mobile */
+            nav {
+                position: sticky;
+                top: 0;
+                z-index: 10;
+                backdrop-filter: blur(10px);
+                background-color: rgba(255, 255, 255, 0.95);
+                margin-bottom: 1rem;
+            }
+            
+            /* Better spacing for mobile forms */
+            .form-row {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .form-row > * {
+                flex: 1;
+                min-width: 0;
+            }
+        }
+        
+        /* Tablet optimizations */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            .checklist-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+            
+            .form-row {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+        }
+        
+        /* Touch-friendly interactions */
+        @media (hover: none) and (pointer: coarse) {
+            .help-btn:active {
+                background-color: #d1d5db;
+                transform: scale(0.95);
+            }
+            
+            .nav-button:active {
+                transform: scale(0.98);
+            }
+            
+            .gemini-btn:active {
+                transform: scale(0.98);
+            }
+            
+            button:active {
+                transform: scale(0.98);
+            }
+        }
+        .help-btn {
+             background-color: #e5e7eb; /* Gray-200 */
+             color: #1f2937; /* Gray-800 */
+             border: 1px solid #d1d5db; /* Gray-300 */
+             font-weight: bold;
+        }
+         .help-btn:hover {
+            background-color: #d1d5db; /* Gray-300 */
+        }
+        .modal-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content ul {
+            list-style-type: disc;
+            padding-left: 20px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-6">
+            <h1 class="text-2xl md:text-4xl font-bold text-gray-700 leading-tight">University Housing Inspection Tool</h1>
+            <p class="text-gray-500 mt-2 text-sm md:text-base px-4">Use the checklists below to evaluate building conditions based on APPA standards and best practices.</p>
+        </header>
+
+        <nav class="flex bg-white p-2 rounded-lg shadow-sm mb-6 mx-2 md:mx-auto md:w-auto">
+            <button id="show-custodial" class="nav-button active text-sm md:text-base font-semibold py-3 px-4 md:px-6 rounded-md">Custodial</button>
+            <button id="show-maintenance" class="nav-button text-sm md:text-base font-semibold py-3 px-4 md:px-6 rounded-md">Maintenance</button>
+            <button id="show-grounds" class="nav-button text-sm md:text-base font-semibold py-3 px-4 md:px-6 rounded-md">Grounds</button>
+        </nav>
+
+        <main id="main-content">
+            <!-- Custodial View -->
+            <div id="custodial-view">
+                <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                    <h2 class="text-2xl font-bold mb-4 text-[#009A44]">Custodial Building Evaluation</h2>
+                    <div class="form-row mb-6">
+                        <select id="custodial-building" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                            <option value="">Select a Building...</option>
+                            <option value="Noren Hall">Noren Hall</option>
+                            <option value="Selke Hall">Selke Hall</option>
+                            <option value="Brannon Hall">Brannon Hall</option>
+                            <option value="McVey Hall">McVey Hall</option>
+                            <option value="West Hall">West Hall</option>
+                            <option value="Landing Zone">Landing Zone</option>
+                            <option value="Wilkerson Commons">Wilkerson Commons</option>
+                            <option value="Swanson Hall">Swanson Hall</option>
+                            <option value="Smith Hall">Smith Hall</option>
+                            <option value="Johnstone Hall">Johnstone Hall</option>
+                            <option value="University Place">University Place</option>
+                            <option value="3600 Campus Rd">3600 Campus Rd</option>
+                            <option value="3605 Manitoba">3605 Manitoba</option>
+                            <option value="110 State St">110 State St</option>
+                            <option value="Williamsburg">Williamsburg</option>
+                            <option value="Mt. Vernon">Mt. Vernon</option>
+                            <option value="Virginia Rose">Virginia Rose</option>
+                            <option value="Townhouses">Townhouses</option>
+                            <option value="72 Plex">72 Plex</option>
+                            <option value="Berkely Drive">Berkely Drive</option>
+                            <option value="540 CC">540 CC</option>
+                            <option value="550 CC">550 CC</option>
+                            <option value="580 CC">580 CC</option>
+                            <option value="560 CC">560 CC</option>
+                            <option value="570 CC">570 CC</option>
+                        </select>
+                        <input type="date" id="custodial-date" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                        <input type="text" id="custodial-inspector" placeholder="Inspector Name" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                    </div>
+                    
+                    <div class="bg-[#e6f5ec] border-l-4 border-[#009A44] text-green-900 p-4 rounded-md mb-6">
+                        <h4 class="font-bold">APPA Service Levels</h4>
+                        <p class="text-sm">Select a level for each item. The definition will appear below it. Click the help button (?) on an item for the detailed rubric.</p>
+                    </div>
+
+                    <div id="custodial-checklist"></div>
+                    
+                    <div class="mt-8">
+                         <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-xl font-bold text-gray-700">AI Analysis & APPA Assessment</h3>
+                         </div>
+                         <div class="mb-4">
+                            <textarea id="custodial-ai-report" placeholder="Click the button below to generate a comprehensive AI analysis of this inspection including overall APPA score and recommendations..." class="w-full p-2 border rounded-md h-32 mb-2"></textarea>
+                            <button class="gemini-btn font-semibold py-2 px-4 rounded-md text-sm w-full" data-target="custodial-ai-report" data-type="comprehensive">🤖 Generate AI Report & APPA Score</button>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Maintenance View -->
+            <div id="maintenance-view" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                    <h2 class="text-2xl font-bold mb-4 text-[#009A44]">Maintenance Building Evaluation</h2>
+                    <div class="form-row mb-6">
+                        <select id="maintenance-building" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                            <option value="">Select a Building...</option>
+                             <option value="Noren Hall">Noren Hall</option>
+                            <option value="Selke Hall">Selke Hall</option>
+                            <option value="Brannon Hall">Brannon Hall</option>
+                            <option value="McVey Hall">McVey Hall</option>
+                            <option value="West Hall">West Hall</option>
+                            <option value="Landing Zone">Landing Zone</option>
+                            <option value="Wilkerson Commons">Wilkerson Commons</option>
+                            <option value="Swanson Hall">Swanson Hall</option>
+                            <option value="Smith Hall">Smith Hall</option>
+                            <option value="Johnstone Hall">Johnstone Hall</option>
+                            <option value="University Place">University Place</option>
+                            <option value="3600 Campus Rd">3600 Campus Rd</option>
+                            <option value="3605 Manitoba">3605 Manitoba</option>
+                            <option value="110 State St">110 State St</option>
+                            <option value="Williamsburg">Williamsburg</option>
+                            <option value="Mt. Vernon">Mt. Vernon</option>
+                            <option value="Virginia Rose">Virginia Rose</option>
+                            <option value="Townhouses">Townhouses</option>
+                            <option value="72 Plex">72 Plex</option>
+                            <option value="Berkely Drive">Berkely Drive</option>
+                            <option value="540 CC">540 CC</option>
+                            <option value="550 CC">550 CC</option>
+                            <option value="580 CC">580 CC</option>
+                            <option value="560 CC">560 CC</option>
+                            <option value="570 CC">570 CC</option>
+                        </select>
+                        <input type="date" id="maintenance-date" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                        <input type="text" id="maintenance-inspector" placeholder="Inspector Name" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                    </div>
+                     <div class="bg-[#e6f5ec] border-l-4 border-[#009A44] text-green-900 p-4 rounded-md mb-6">
+                        <h4 class="font-bold">APPA Service Levels</h4>
+                        <p class="text-sm">Select a level for each item. The definition will appear below it. Click the help button (?) on an item for the detailed rubric.</p>
+                    </div>
+                    
+                    <div id="maintenance-checklist"></div>
+
+                    <div class="mt-8">
+                         <h3 class="text-xl font-bold mb-2 text-gray-700">AI Analysis & APPA Assessment</h3>
+                         <div class="mb-4">
+                            <textarea id="maintenance-ai-report" placeholder="Click the button below to generate a comprehensive AI analysis of this inspection including overall APPA score and recommendations..." class="w-full p-2 border rounded-md h-32 mb-2"></textarea>
+                            <button class="gemini-btn font-semibold py-2 px-4 rounded-md text-sm w-full" data-target="maintenance-ai-report" data-type="comprehensive">🤖 Generate AI Report & APPA Score</button>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grounds View -->
+            <div id="grounds-view" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+                    <h2 class="text-2xl font-bold mb-4 text-[#009A44]">Grounds Evaluation</h2>
+                    <div class="form-row mb-6">
+                        <select id="grounds-building" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                            <option value="">Select a Building/Area...</option>
+                             <option value="Noren Hall">Noren Hall</option>
+                            <option value="Selke Hall">Selke Hall</option>
+                            <option value="Brannon Hall">Brannon Hall</option>
+                            <option value="McVey Hall">McVey Hall</option>
+                            <option value="West Hall">West Hall</option>
+                            <option value="Landing Zone">Landing Zone</option>
+                            <option value="Wilkerson Commons">Wilkerson Commons</option>
+                            <option value="Swanson Hall">Swanson Hall</option>
+                            <option value="Smith Hall">Smith Hall</option>
+                            <option value="Johnstone Hall">Johnstone Hall</option>
+                            <option value="University Place">University Place</option>
+                            <option value="3600 Campus Rd">3600 Campus Rd</option>
+                            <option value="3605 Manitoba">3605 Manitoba</option>
+                            <option value="110 State St">110 State St</option>
+                            <option value="Williamsburg">Williamsburg</option>
+                            <option value="Mt. Vernon">Mt. Vernon</option>
+                            <option value="Virginia Rose">Virginia Rose</option>
+                            <option value="Townhouses">Townhouses</option>
+                            <option value="72 Plex">72 Plex</option>
+                            <option value="Berkely Drive">Berkely Drive</option>
+                            <option value="540 CC">540 CC</option>
+                            <option value="550 CC">550 CC</option>
+                            <option value="580 CC">580 CC</option>
+                            <option value="560 CC">560 CC</option>
+                            <option value="570 CC">570 CC</option>
+                        </select>
+                        <input type="date" id="grounds-date" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                        <input type="text" id="grounds-inspector" placeholder="Inspector Name" class="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#009A44]">
+                    </div>
+                     <div class="bg-[#e6f5ec] border-l-4 border-[#009A44] text-green-900 p-4 rounded-md mb-6">
+                        <h4 class="font-bold">APPA Service Levels</h4>
+                        <p class="text-sm">Select a level for each item. The definition will appear below it. Click the help button (?) on an item for the detailed rubric.</p>
+                    </div>
+                    
+                    <div id="grounds-checklist"></div>
+
+                    <div class="mt-8">
+                         <h3 class="text-xl font-bold mb-2 text-gray-700">AI Analysis & APPA Assessment</h3>
+                         <div class="mb-4">
+                            <textarea id="grounds-ai-report" placeholder="Click the button below to generate a comprehensive AI analysis of this inspection including overall APPA score and recommendations..." class="w-full p-2 border rounded-md h-32 mb-2"></textarea>
+                            <button class="gemini-btn font-semibold py-2 px-4 rounded-md text-sm w-full" data-target="grounds-ai-report" data-type="comprehensive">🤖 Generate AI Report & APPA Score</button>
+                         </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-8">
+                <button id="submit-and-email" class="bg-black text-white font-bold py-3 px-8 rounded-lg hover:bg-gray-800 transition-colors shadow-lg">
+                    Submit & Email Report
+                </button>
+                <p id="status-message" class="text-sm text-gray-500 mt-2 h-4"></p>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg shadow-2xl p-6 md:p-8 max-w-2xl w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modal-title" class="text-2xl font-bold text-gray-800">Rubric Title</h3>
+                <button id="modal-close-btn" class="text-gray-500 hover:text-gray-800 text-3xl font-bold">&times;</button>
+            </div>
+            <div id="modal-content" class="text-gray-600 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                <!-- Help content will be injected here -->
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Debug helper for troubleshooting
+        window.debugInspectionTool = {
+            checkAPIStatus: function() {
+                const apiKey = "AIzaSyCxo29Q6HRHRzxTuTU_IanG9yvJmctdzb0";
+                console.log("API Key present:", apiKey !== "PASTE_YOUR_GEMINI_API_KEY_HERE");
+                console.log("Ongoing calls:", ongoingCalls ? ongoingCalls.size : "Not initialized");
+                console.log("Active view:", typeof activeView !== 'undefined' ? activeView : "Not initialized");
+            },
+            getFormData: function() {
+                if (typeof activeView === 'undefined') return "Tool not initialized";
+                const building = document.getElementById(`${activeView}-building`)?.value;
+                const inspector = document.getElementById(`${activeView}-inspector`)?.value;
+                const date = document.getElementById(`${activeView}-date`)?.value;
+                return { activeView, building, inspector, date };
+            },
+            testAvailableModels: async function() {
+                const apiKey = "AIzaSyCxo29Q6HRHRzxTuTU_IanG9yvJmctdzb0";
+                console.log("=== GEMINI API DIAGNOSTICS ===");
+                console.log("API Key (first 20 chars):", apiKey.substring(0, 20) + "...");
+                
+                // First, try to list available models with both API versions
+                console.log("\n1. Testing model listing endpoints...");
+                const listEndpoints = [
+                    'https://generativelanguage.googleapis.com/v1beta/models',
+                    'https://generativelanguage.googleapis.com/v1/models'
+                ];
+                
+                for (const endpoint of listEndpoints) {
+                    try {
+                        console.log(`Trying: ${endpoint}`);
+                        const listResponse = await fetch(`${endpoint}?key=${apiKey}`);
+                        const responseText = await listResponse.text();
+                        
+                        if (listResponse.ok) {
+                            const models = JSON.parse(responseText);
+                            console.log(`✅ ${endpoint} SUCCESS`);
+                            
+                            // Show all models
+                            const allModelNames = models.models?.map(m => m.name.replace('models/', '')) || [];
+                            console.log("All available models:", allModelNames);
+                            
+                            // Filter and show just the Gemini text generation models
+                            const geminiModels = models.models?.filter(m => 
+                                m.supportedGenerationMethods?.includes('generateContent') &&
+                                m.name.includes('gemini') && !m.name.includes('embedding')
+                            ) || [];
+                            console.log("Gemini text generation models:", geminiModels.map(m => m.name.replace('models/', '')));
+                            
+                            // If we found Gemini text generation models, test the best one
+                            if (geminiModels && geminiModels.length > 0) {
+                                // Sort to get the best model (same logic as the main code)
+                                const sortedModels = geminiModels.sort((a, b) => {
+                                    const aName = a.name.toLowerCase();
+                                    const bName = b.name.toLowerCase();
+                                    
+                                    // Prioritize gemini-2.5 and gemini-2.0 models
+                                    if (aName.includes('gemini-2.5') && !bName.includes('gemini-2.5')) return -1;
+                                    if (bName.includes('gemini-2.5') && !aName.includes('gemini-2.5')) return 1;
+                                    if (aName.includes('gemini-2.0') && !bName.includes('gemini-2.0')) return -1;
+                                    if (bName.includes('gemini-2.0') && !aName.includes('gemini-2.0')) return 1;
+                                    
+                                    // Prefer 'flash' models (faster)
+                                    if (aName.includes('flash') && !bName.includes('flash')) return -1;
+                                    if (bName.includes('flash') && !aName.includes('flash')) return 1;
+                                    
+                                    return a.name.localeCompare(b.name);
+                                });
+                                
+                                const firstModel = sortedModels[0].name;
+                                console.log(`\n2. Testing first available model: ${firstModel}`);
+                                const testUrl = `${endpoint.replace('/models', '')}/${firstModel}:generateContent?key=${apiKey}`;
+                                const testPayload = { contents: [{ parts: [{ text: "Hello" }] }] };
+                                
+                                try {
+                                    const testResponse = await fetch(testUrl, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(testPayload)
+                                    });
+                                    
+                                    if (testResponse.ok) {
+                                        const result = await testResponse.json();
+                                        console.log(`✅ Model ${firstModel} is working!`);
+                                        console.log("Sample response:", result.candidates?.[0]?.content?.parts?.[0]?.text || "No text");
+                                        return { working: true, model: firstModel, endpoint: endpoint };
+                                    } else {
+                                        const errorText = await testResponse.text();
+                                        console.log(`❌ Model test failed: ${testResponse.status} - ${errorText}`);
+                                    }
+                                } catch (testError) {
+                                    console.log(`❌ Model test error:`, testError.message);
+                                }
+                            }
+                            return models;
+                        } else {
+                            console.log(`❌ ${endpoint} failed: ${listResponse.status} - ${responseText}`);
+                        }
+                    } catch (error) {
+                        console.log(`❌ ${endpoint} error:`, error.message);
+                    }
+                }
+                
+                // If listing failed, try manual model testing
+                console.log("\n2. Manual model testing (listing failed)...");
+                const testConfigs = [
+                    { version: 'v1beta', model: 'gemini-1.5-flash-latest' },
+                    { version: 'v1beta', model: 'gemini-1.5-flash' },
+                    { version: 'v1beta', model: 'gemini-1.5-pro-latest' },
+                    { version: 'v1beta', model: 'gemini-1.5-pro' },
+                    { version: 'v1beta', model: 'gemini-pro-latest' },
+                    { version: 'v1beta', model: 'gemini-pro' },
+                    { version: 'v1', model: 'gemini-1.5-flash-001' },
+                    { version: 'v1', model: 'gemini-1.5-flash' },
+                    { version: 'v1', model: 'gemini-1.0-pro-latest' },
+                    { version: 'v1', model: 'gemini-1.0-pro' },
+                    { version: 'v1', model: 'gemini-pro' }
+                ];
+                
+                const testPayload = { contents: [{ parts: [{ text: "Hello" }] }] };
+                
+                for (const config of testConfigs) {
+                    try {
+                        const testUrl = `https://generativelanguage.googleapis.com/${config.version}/models/${config.model}:generateContent?key=${apiKey}`;
+                        const testResponse = await fetch(testUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(testPayload)
+                        });
+                        
+                        const responseText = await testResponse.text();
+                        
+                        if (testResponse.ok) {
+                            const result = JSON.parse(responseText);
+                            console.log(`✅ ${config.version}/${config.model} is working!`);
+                            console.log("Sample response:", result.candidates?.[0]?.content?.parts?.[0]?.text || "No text");
+                            return { working: true, ...config };
+                        } else {
+                            console.log(`❌ ${config.version}/${config.model} failed: ${testResponse.status}`);
+                            if (testResponse.status === 403) {
+                                console.log("   → This might be an API key or quota issue");
+                            } else if (testResponse.status === 404) {
+                                console.log("   → Model not found");
+                            }
+                            console.log("   → Response:", responseText.substring(0, 200));
+                        }
+                    } catch (error) {
+                        console.log(`❌ ${config.version}/${config.model} error:`, error.message);
+                    }
+                }
+                
+                console.log("\n=== DIAGNOSIS COMPLETE ===");
+                console.log("❌ No working models found.");
+                console.log("Possible issues:");
+                console.log("1. API key is invalid or expired");
+                console.log("2. API quota exceeded");  
+                console.log("3. Gemini API is temporarily unavailable");
+                console.log("4. Network connectivity issues");
+                
+                return { working: false, error: "No working models found" };
+            },
+            
+            // Quick API key validation test
+            validateAPIKey: async function() {
+                const apiKey = "AIzaSyCxo29Q6HRHRzxTuTU_IanG9yvJmctdzb0";
+                console.log("Testing API key validity...");
+                
+                try {
+                    // Simple endpoint that should work with any valid key
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                    const text = await response.text();
+                    
+                    if (response.status === 403) {
+                        console.log("❌ API Key appears to be invalid or restricted");
+                        console.log("Response:", text);
+                        return false;
+                    } else if (response.status === 429) {
+                        console.log("⚠️ API Key is valid but quota exceeded");
+                        return true;
+                    } else if (response.ok) {
+                        console.log("✅ API Key appears to be valid");
+                        return true;
+                    } else {
+                        console.log(`⚠️ Unexpected response: ${response.status}`);
+                        console.log("Response:", text);
+                        return null;
+                    }
+                } catch (error) {
+                    console.log("❌ Network error:", error.message);
+                    return null;
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const custodialView = document.getElementById('custodial-view');
+            const maintenanceView = document.getElementById('maintenance-view');
+            const groundsView = document.getElementById('grounds-view');
+            const showCustodialBtn = document.getElementById('show-custodial');
+            const showMaintenanceBtn = document.getElementById('show-maintenance');
+            const showGroundsBtn = document.getElementById('show-grounds');
+            const submitAndEmailBtn = document.getElementById('submit-and-email');
+            const statusMessage = document.getElementById('status-message');
+            const mainContent = document.getElementById('main-content');
+            
+            const helpModal = document.getElementById('help-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContent = document.getElementById('modal-content');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+
+            let activeView = 'custodial';
+            
+            const appaLevels = {
+                '0': 'Select a level...',
+                '1': 'Level 1',
+                '2': 'Level 2',
+                '3': 'Level 3',
+                '4': 'Level 4',
+                '5': 'Level 5'
+            };
+
+            const custodialData = [
+                { category: 'Common Areas (Lobbies, Hallways, Lounges)', items: ['Flooring (Hard Surface)', 'Flooring (Carpet/Rugs)', 'Walls & Baseboards', 'Entrances & Glass', 'Furniture & Upholstery', 'Lighting Fixtures', 'Trash & Recycling Bins', 'Drinking Fountains', 'Odor Control'] },
+                { category: 'Restrooms (Common/Public)', items: ['Floors & Drains', 'Toilets & Urinals', 'Sinks & Countertops', 'Mirrors & Dispensers', 'Stall Partitions', 'Trash Receptacles', 'Ventilation & Odor'] },
+                { category: 'Ancillary Spaces (Kitchens, Laundry, Study Rooms)', items: ['Flooring', 'Countertops & Sinks', 'Appliances (Exterior)', 'Laundry Machines (Exterior)', 'Furniture (Tables/Chairs)', 'Trash & Recycling Bins'] }
+            ];
+            
+            const maintenanceData = [
+                { category: 'Building Exterior & Envelope', items: ['Foundation & Walls', 'Windows & Seals', 'Doors & Hardware', 'Roof & Gutters', 'Walkways & Stairs', 'Exterior Lighting'] },
+                { category: 'Interior Common Areas (Lobbies, Hallways, Stairs)', items: ['Flooring Condition', 'Wall & Ceiling Condition', 'Paint Condition', 'Doors & Hardware', 'Handrails & Guardrails', 'Lighting (Functionality)', 'HVAC Vents & Grilles', 'Fire & Life Safety'] },
+                { category: 'Building Systems (General Observations)', items: ['HVAC Operation', 'Plumbing (Public Areas)', 'Electrical (Outlets/Switches)', 'Elevator Operation'] },
+                { category: 'Apartments/Dorms (Sample Inspection)', items: ['Door & Lockset', 'Paint & Wall Condition', 'Flooring Condition', 'Windows & Blinds', 'Plumbing Fixtures', 'Appliances (If applicable)', 'Lighting & Electrical'] }
+            ];
+
+            const groundsData = [
+                { category: 'Landscaping (Seasonal)', items: ['Turf & Lawn Health', 'Edging (Walks, Curbs)', 'Plant Beds & Mulch', 'Trees & Shrubs Pruning', 'Weed Control', 'Litter & Debris Removal'] },
+                { category: 'Hardscapes & Site Amenities', items: ['Walkways & Patios Condition', 'Benches & Site Furniture', 'Trash & Ash Receptacles', 'Bike Racks', 'Signage'] },
+                { category: 'Snow & Ice Removal (Seasonal)', items: ['Walkway & Sidewalk Clarity', 'Entrances & ADA Ramps', 'Stairs & Landings', 'De-Icing Application', 'Snow Pile Placement'] }
+            ];
+
+            const allHelpContent = {
+                'Flooring (Hard Surface)': `<strong>Level 1:</strong> High gloss finish, free of streaks, scuffs, and dirt.<br><strong>Level 3:</strong> Generally clean but may have a dull finish or minor scuffs.<br><strong>Level 5:</strong> Visibly dirty, sticky, or stained.`,
+                'Flooring (Carpet/Rugs)': `<strong>Level 1:</strong> Uniform appearance, no spots or stains.<br><strong>Level 3:</strong> Clean from vacuuming, but may have small, old stains.<br><strong>Level 5:</strong> Multiple large stains or visible debris.`,
+                'Walls & Baseboards': `<strong>Level 1:</strong> Free of all marks, scuffs, and fingerprints. Baseboards are completely clean.<br><strong>Level 3:</strong> Minor scuffs or marks are visible upon close inspection. Baseboards may have dust.<br><strong>Level 5:</strong> Widespread marks, graffiti, or heavy soil. Baseboards are dirty or damaged.`,
+                'Entrances & Glass': `<strong>Level 1:</strong> Glass is perfectly clear, free of streaks, smudges, and handprints. Door frames and hardware are clean.<br><strong>Level 3:</strong> Glass is mostly clean but has a few minor smudges or streaks. Some dust on frames.<br><strong>Level 5:</strong> Glass is cloudy, covered in handprints, or has heavy soil.`,
+                'Furniture & Upholstery': `<strong>Level 1:</strong> Arranged neatly, dust-free, and upholstery is free of spots or stains.<br><strong>Level 3:</strong> Generally tidy but may have light dust or a few minor spots on upholstery.<br><strong>Level 5:</strong> Visibly dusty, stained, or disarranged.`,
+                'Lighting Fixtures': `<strong>Level 1:</strong> Fixtures and lenses are completely clean, free of dust, dirt, and insects.<br><strong>Level 3:</strong> Light dusting is apparent on fixtures; a few dead insects may be present.<br><strong>Level 5:</strong> Fixtures are heavily coated in dust or have a large accumulation of dead insects.`,
+                'Trash & Recycling Bins': `<strong>Level 1:</strong> Bins are empty, clean inside and out, and have a fresh liner. No odor.<br><strong>Level 3:</strong> Bins have been emptied but may have minor residue or a slight odor.<br><strong>Level 5:</strong> Bins are overflowing, dirty, and have a strong, unpleasant odor.`,
+                'Drinking Fountains': `<strong>Level 1:</strong> Basin and fixtures are spotless, polished, and free of mineral deposits.<br><strong>Level 3:</strong> Basin is clean but may have water spots or minor mineral buildup.<br><strong>Level 5:</strong> Basin is dirty, stained, or has significant mineral deposits.`,
+                'Odor Control': `<strong>Level 1:</strong> The area has a fresh, clean scent, or no scent at all.<br><strong>Level 3:</strong> The area is mostly neutral but may have a faint, lingering odor.<br><strong>Level 5:</strong> A strong, persistent, and unpleasant odor is immediately noticeable.`,
+                'Floors & Drains': `<strong>Level 1:</strong> Floor and grout are perfectly clean and dry. Drains are clear and odor-free.<br><strong>Level 3:</strong> Floor is clean but may be damp or have minor stains. Grout may be slightly discolored.<br><strong>Level 5:</strong> Floor is wet, dirty, or has standing water. Strong odor from drains.`,
+                'Toilets & Urinals': `<strong>Level 1:</strong> Fixtures are gleaming inside and out. No stains, mineral rings, or odors.<br><strong>Level 3:</strong> Fixtures have been cleaned but may have minor water spots or a faint stain.<br><strong>Level 5:</strong> Visible soil, heavy stains, or strong odors are present.`,
+                'Sinks & Countertops': `<strong>Level 1:</strong> Sinks, faucets, and countertops are clean, dry, and polished. No soap residue or spots.<br><strong>Level 3:</strong> Surfaces are wiped down but may have water spots or minor soap residue.<br><strong>Level 5:</strong> Sinks or countertops are dirty, have soap scum buildup, or are cluttered.`,
+                'Mirrors & Dispensers': `<strong>Level 1:</strong> Mirrors are spotless. Dispensers are clean, full, and functional.<br><strong>Level 3:</strong> Mirrors have a few minor spots. Dispensers may have some dust or fingerprints.<br><strong>Level 5:</strong> Mirrors are cloudy or heavily spotted. Dispensers are empty, dirty, or broken.`,
+                'Stall Partitions': `<strong>Level 1:</strong> Partitions are free of all marks, dust, and graffiti.<br><strong>Level 3:</strong> Partitions have a few minor scuffs or marks.<br><strong>Level 5:</strong> Partitions are heavily marked, have graffiti, or are dirty to the touch.`,
+                'Trash Receptacles': `<strong>Level 1:</strong> Bins are empty, clean inside and out, and have a fresh liner. No odor.<br><strong>Level 3:</strong> Bins have been emptied but may have minor residue or a slight odor.<br><strong>Level 5:</strong> Bins are overflowing, dirty, and have a strong, unpleasant odor.`,
+                'Ventilation & Odor': `<strong>Level 1:</strong> Vents are clean and dust-free. The air smells fresh and clean.<br><strong>Level 3:</strong> Vents may have light dust. A faint, stuffy odor may be present.<br><strong>Level 5:</strong> Vents are heavily caked with dust. A strong, unpleasant odor is immediately noticeable.`,
+                'Flooring': `See "Flooring (Hard Surface)" or "Flooring (Carpet/Rugs)" rubrics.`,
+                'Countertops & Sinks': `See "Sinks & Countertops" rubric.`,
+                'Appliances (Exterior)': `<strong>Level 1:</strong> Exteriors of all appliances are spotless, free of fingerprints, spills, and grease.<br><strong>Level 3:</strong> Appliances are wiped down but may have minor streaks or fingerprints.<br><strong>Level 5:</strong> Appliances have visible spills, grease, or heavy soiling.`,
+                'Laundry Machines (Exterior)': `<strong>Level 1:</strong> Exteriors, lids, and control panels are clean and free of detergent residue or dust.<br><strong>Level 3:</strong> Machines have minor dust or detergent residue.<br><strong>Level 5:</strong> Machines are heavily soiled with spilled detergent, dirt, or lint.`,
+                'Furniture (Tables/Chairs)': `<strong>Level 1:</strong> Tables and chairs are clean, wiped down, and arranged neatly.<br><strong>Level 3:</strong> Surfaces are generally clean but may have crumbs or be slightly out of place.<br><strong>Level 5:</strong> Surfaces are sticky, dirty, or cluttered. Furniture is disorganized.`,
+                'Foundation & Walls': `<strong>Level 1:</strong> No visible cracks, spalling, or water intrusion. Paint or brickwork is in perfect condition.<br><strong>Level 3:</strong> Minor, non-structural hairline cracks or minor efflorescence (white, powdery deposits).<br><strong>Level 5:</strong> Significant structural cracks, water damage, or spalling (flaking/chipping) is visible.`,
+                'Windows & Seals': `<strong>Level 1:</strong> Glass is intact, seals are perfect with no drafts or condensation. Hardware operates smoothly.<br><strong>Level 3:</strong> Minor drafts can be felt. Seal may show signs of aging. Hardware is functional but may be stiff.<br><strong>Level 5:</strong> Window is broken, seal has failed (fogging between panes), or it will not lock/close properly.`,
+                'Doors & Hardware': `<strong>Level 1:</strong> Door opens, closes, and latches smoothly. No damage to door or frame. Closer works correctly.<br><strong>Level 3:</strong> Door squeaks or rubs the frame. Finish is worn. Hardware is functional but loose.<br><strong>Level 5:</strong> Door does not close, latch, or lock. Significant damage to the door or frame.`,
+                'Roof & Gutters': `<strong>Level 1:</strong> No missing shingles or visible damage. Gutters are clean and securely attached.<br><strong>Level 3:</strong> Minor granule loss on shingles. Gutters contain a small amount of debris but are functional.<br><strong>Level 5:</strong> Missing/damaged shingles, obvious leaks, or gutters are clogged, detached, or damaged.`,
+                'Walkways & Stairs': `<strong>Level 1:</strong> Concrete/asphalt is level and free of cracks or trip hazards. Handrails are secure.<br><strong>Level 3:</strong> Minor surface cracks or slight unevenness that does not pose a trip hazard.<br><strong>Level 5:</strong> Significant cracks, heaving, or spalling creating a clear trip hazard. Handrails are loose or missing.`,
+                'Exterior Lighting': `<strong>Level 1:</strong> All fixtures are functional, clean, and properly aimed. Covers are intact.<br><strong>Level 3:</strong> One or two bulbs in a large area are out. Fixtures may be dirty.<br><strong>Level 5:</strong> Widespread outages creating a safety/security issue. Fixtures are broken or missing.`,
+                'Flooring Condition': `<strong>Level 1:</strong> Flooring is in like-new condition. No broken tiles, torn carpet, or significant scratches.<br><strong>Level 3:</strong> Flooring shows normal wear and tear, such as minor scratches or worn carpet in high-traffic areas.<br><strong>Level 5:</strong> Flooring is a trip hazard (torn carpet, broken tiles) or has widespread, significant damage.`,
+                'Wall & Ceiling Condition': `<strong>Level 1:</strong> Surfaces are smooth and free of holes, cracks, or water stains.<br><strong>Level 3:</strong> Minor dings, scuffs, or small nail holes are present. Stress cracks may be visible.<br><strong>Level 5:</strong> Large holes, widespread cracking, or active water stains are visible.`,
+                'Paint Condition': `<strong>Level 1:</strong> Paint is fresh, with a uniform finish. No scuffs, chips, or peeling.<br><strong>Level 3:</strong> Paint has numerous scuffs or is faded. Minor chipping is present.<br><strong>Level 5:</strong> Widespread peeling, chipping, or graffiti is present.`,
+                'Handrails & Guardrails': `<strong>Level 1:</strong> Securely mounted, meets code, and finish is in good condition.<br><strong>Level 3:</strong> Secure, but the finish is worn or scratched.<br><strong>Level 5:</strong> Loose, damaged, or missing, posing a direct safety hazard.`,
+                'Lighting (Functionality)': `<strong>Level 1:</strong> All lights are functional. Lenses and covers are intact and clean.<br><strong>Level 3:</strong> A single bulb in a non-critical area is out.<br><strong>Level 5:</strong> Multiple or widespread outages, especially in critical areas like stairwells. Broken fixtures.`,
+                'HVAC Vents & Grilles': `<strong>Level 1:</strong> Vents are clean, undamaged, and direct airflow correctly.<br><strong>Level 3:</strong> Vents are dusty or have minor cosmetic damage (bent fins).<br><strong>Level 5:</strong> Vent is missing, heavily damaged, or completely blocked.`,
+                'Fire & Life Safety': `<strong>Level 1:</strong> All devices (smoke detectors, sprinklers, exit signs, extinguishers) are present, in-date, and show no signs of tampering or damage.<br><strong>Level 3:</strong> An exit sign light is burnt out (but still visible). Extinguisher tag is nearing its inspection date.<br><strong>Level 5:</strong> Device is missing, expired, has been tampered with, or is visibly damaged. A clear safety violation.`,
+                'HVAC Operation': `<strong>Level 1:</strong> System provides appropriate heating/cooling, operates quietly, and thermostats are functional.<br><strong>Level 3:</strong> System is operational but may be noisy or struggling to maintain temperature.<br><strong>Level 5:</strong> System is not providing heating or cooling. Obvious signs of major failure (leaks, loud noises).`,
+                'Plumbing (Public Areas)': `<strong>Level 1:</strong> No leaks, drips, or clogs. Fixtures are secure. Good water pressure.<br><strong>Level 3:</strong> A faucet has a slow drip or a drain is slow. Minor issues requiring a work order.<br><strong>Level 5:</strong> Active leak, clogged drain, or non-functional fixture requiring immediate attention.`,
+                'Electrical (Outlets/Switches)': `<strong>Level 1:</strong> All outlets and switches work. Plates are intact and not cracked.<br><strong>Level 3:</strong> A single outlet is non-functional, or a switch plate is cracked.<br><strong>Level 5:</strong> Multiple dead outlets, signs of arcing (burn marks), or missing/broken plates exposing wiring.`,
+                'Elevator Operation': `<strong>Level 1:</strong> Travels smoothly, levels correctly at floors, buttons and indicators work perfectly. Clean interior.<br><strong>Level 3:</strong> May be slightly noisy or not level perfectly with the floor. Interior may be scuffed.<br><strong>Level 5:</strong> Out of service, makes alarming noises, or fails to level properly, creating a trip hazard.`,
+                'Door & Lockset': `<strong>Level 1:</strong> Door, frame, and hardware are in perfect condition. Door opens, closes, and locks smoothly.<br><strong>Level 3:</strong> Door or frame have minor cosmetic damage. Lock is functional but may be sticky.<br><strong>Level 5:</strong> Door is damaged and will not close or lock. Lockset is broken.`,
+                'Windows & Blinds': `<strong>Level 1:</strong> Window is in perfect condition (see exterior). Blinds are clean, intact, and operate smoothly.<br><strong>Level 3:</strong> Blinds may have slightly bent slats or be difficult to operate.<br><strong>Level 5:</strong> Blinds are broken, missing slats, or non-functional.`,
+                'Plumbing Fixtures': `<strong>Level 1:</strong> All fixtures (sinks, toilets, showers) are in perfect working order with no leaks, clogs, or cosmetic damage.<br><strong>Level 3:</strong> A faucet drips, a toilet runs intermittently, or a drain is slow.<br><strong>Level 5:</strong> Fixture is non-functional, has a significant leak, or is badly damaged.`,
+                'Appliances (If applicable)': `<strong>Level 1:</strong> All appliances are clean and in perfect working order.<br><strong>Level 3:</strong> An appliance is functional but may be noisy or show signs of significant wear.<br><strong>Level 5:</strong> An essential appliance (refrigerator, stove) is non-functional.`,
+                'Turf & Lawn Health': `<strong>Level 1:</strong> Turf is lush, green, and evenly mown. Free of weeds and bare spots.<br><strong>Level 3:</strong> Turf is generally healthy but may have some weeds or small, thin areas.<br><strong>Level 5:</strong> Large bare spots, widespread weeds, or stressed/dormant turf.`,
+                'Edging (Walks, Curbs)': `<strong>Level 1:</strong> A sharp, clean edge exists between turf and hardscapes. No overgrowth.<br><strong>Level 3:</strong> A defined edge is present, but some grass may be creeping over.<br><strong>Level 5:</strong> No defined edge. Turf is growing over walkways or curbs.`,
+                'Plant Beds & Mulch': `<strong>Level 1:</strong> Beds are well-defined and fully covered with a fresh layer of mulch. No weeds.<br><strong>Level 3:</strong> Mulch is thin in some areas; a few small weeds are present.<br><strong>Level 5:</strong> Beds are overrun with weeds, or mulch is washed out and bare soil is exposed.`,
+                'Trees & Shrubs Pruning': `<strong>Level 1:</strong> All plants are properly pruned according to horticultural standards. No dead branches or overgrowth obstructing paths.<br><strong>Level 3:</strong> Minor pruning needed; some dead twigs or sucker growth visible.<br><strong>Level 5:</strong> Significant overgrowth, dead branches, or plants are obstructing walkways/windows.`,
+                'Weed Control': `<strong>Level 1:</strong> All areas, including pavement cracks, are 99-100% free of weeds.<br><strong>Level 3:</strong> Some small weeds are visible in cracks or plant beds.<br><strong>Level 5:</strong> Weeds are widespread and detract from the overall appearance.`,
+                'Litter & Debris Removal': `<strong>Level 1:</strong> Entire area is free of litter, cigarette butts, and natural debris (sticks, excess leaves).<br><strong>Level 3:</strong> A few small pieces of litter are visible upon close inspection.<br><strong>Level 5:</strong> Litter is obvious and widespread across the area.`,
+                'Walkways & Patios Condition': `<strong>Level 1:</strong> Hardscapes are clean, free of debris, and have no cracks or trip hazards.<br><strong>Level 3:</strong> Minor surface cracks or stains. May need sweeping.<br><strong>Level 5:</strong> Significant cracks, heaving, or surface degradation creating a trip hazard.`,
+                'Benches & Site Furniture': `<strong>Level 1:</strong> Clean, in good repair, with no damage or graffiti.<br><strong>Level 3:</strong> Functional but may have minor cosmetic issues like scratches or faded paint.<br><strong>Level 5:</strong> Broken, unsafe, or heavily damaged/vandalized.`,
+                'Trash & Ash Receptacles': `<strong>Level 1:</strong> Empty, clean, and in good condition. Not overflowing.<br><strong>Level 3:</strong> Approaching full or has minor exterior dirt.<br><strong>Level 5:</strong> Overflowing with trash, dirty, or damaged.`,
+                'Bike Racks': `<strong>Level 1:</strong> In good condition, securely anchored, and free of abandoned bikes/locks.<br><strong>Level 3:</strong> Functional but may have cosmetic wear or a single abandoned bike.<br><strong>Level 5:</strong> Damaged, loose, or cluttered with multiple abandoned bikes.`,
+                'Signage': `<strong>Level 1:</strong> Signs are clean, legible, and in good condition.<br><strong>Level 3:</strong> Minor fading or dirt but still fully legible.<br><strong>Level 5:</strong> Damaged, illegible, or missing.`,
+                'Walkway & Sidewalk Clarity': `<strong>Level 1:</strong> Completely clear of snow and ice, edge to edge. Bare pavement is visible.<br><strong>Level 3:</strong> Main path is clear, but some snow/ice remains along edges. Generally safe.<br><strong>Level 5:</strong> Significant accumulation creating clear slip-and-fall hazards. Unsafe.`,
+                'Entrances & ADA Ramps': `<strong>Level 1:</strong> Highest priority. Completely clear of snow and ice. Meets or exceeds accessibility standards.<br><strong>Level 3:</strong> Clear and accessible, but may require minor touch-up of refrozen areas.<br><strong>Level 5:</strong> Obstructed, icy, or otherwise inaccessible and unsafe.`,
+                'Stairs & Landings': `<strong>Level 1:</strong> All steps and landings are completely clear of snow and ice. Handrails are accessible.<br><strong>Level 3:</strong> Steps are passable but may have minor snow/ice buildup in corners.<br><strong>Level 5:</strong> Steps are hazardous, covered in ice or deep snow.`,
+                'De-Icing Application': `<strong>Level 1:</strong> De-icing agent (salt, sand) is applied appropriately and effectively. No icy patches.<br><strong>Level 3:</strong> De-icer has been applied but some refreezing is occurring on slick spots.<br><strong>Level 5:</strong> No evidence of de-icing application in hazardous areas.`,
+                'Snow Pile Placement': `<strong>Level 1:</strong> Snow is piled in designated areas, not obstructing sightlines, parking, or drainage.<br><strong>Level 3:</strong> Snow piles are generally well-placed but may be slightly encroaching on a parking space.<br><strong>Level 5:</strong> Snow piles are obstructing traffic sightlines, blocking hydrants, or will cause drainage problems upon melting.`
+            };
+            
+            function createChecklist(container, data) {
+                 container.innerHTML = '';
+                data.forEach(section => {
+                    const sectionDiv = document.createElement('div');
+                    sectionDiv.className = 'mb-8';
+                    sectionDiv.innerHTML = `<h3 class="text-xl font-bold mb-4 pb-2 border-b text-gray-700">${section.category}</h3>`;
+                    
+                    const itemsGrid = document.createElement('div');
+                    itemsGrid.className = 'space-y-4';
+                    
+                    section.items.forEach(item => {
+                        const itemWrapper = document.createElement('div');
+                        itemWrapper.className = 'checklist-item p-4 border rounded-lg bg-gray-50';
+                        
+                        const itemHeader = document.createElement('div');
+                        itemHeader.className = 'flex items-center justify-between mb-3';
+                        
+                        const label = document.createElement('label');
+                        label.className = 'font-semibold text-gray-700';
+                        label.textContent = item;
+                        itemHeader.appendChild(label);
+                        
+                        const helpButton = document.createElement('button');
+                        helpButton.className = 'help-btn rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs';
+                        helpButton.textContent = '?';
+                        helpButton.dataset.item = item;
+                        itemHeader.appendChild(helpButton);
+                        
+                        const itemContent = document.createElement('div');
+                        itemContent.className = 'grid grid-cols-1 md:grid-cols-3 gap-4 items-start';
+
+                        const controls = `
+                            <div class="md:col-span-3 grid grid-cols-1 gap-2 mt-2">
+                                <select class="w-full p-2 border rounded-md appa-level-select">
+                                    <option value="0">Select Level</option>
+                                    <option value="1">Level 1</option>
+                                    <option value="2">Level 2</option>
+                                    <option value="3">Level 3</option>
+                                    <option value="4">Level 4</option>
+                                    <option value="5">Level 5</option>
+                                </select>
+                                <p class="text-xs text-gray-500 italic p-2 rounded-md bg-white min-h-[1.5em]"></p>
+                                <textarea placeholder="Inspector Notes & Action Items..." class="w-full p-2 border rounded-md mt-2 h-20 text-sm"></textarea>
+                            </div>
+                        `;
+                        
+                        const controlsWrapper = document.createElement('div');
+                        controlsWrapper.innerHTML = controls;
+
+                        itemWrapper.appendChild(itemHeader);
+                        itemWrapper.appendChild(controlsWrapper);
+                        itemsGrid.appendChild(itemWrapper);
+                    });
+
+                    sectionDiv.appendChild(itemsGrid);
+                    container.appendChild(sectionDiv);
+                });
+            }
+
+            const custodialChecklistContainer = document.getElementById('custodial-checklist');
+            createChecklist(custodialChecklistContainer, custodialData);
+
+            const maintenanceChecklistContainer = document.getElementById('maintenance-checklist');
+            createChecklist(maintenanceChecklistContainer, maintenanceData);
+            
+            const groundsChecklistContainer = document.getElementById('grounds-checklist');
+            createChecklist(groundsChecklistContainer, groundsData);
+
+            function handleAppaSelectChange(e) {
+                const select = e.target;
+                if (select.classList.contains('appa-level-select')) {
+                    const level = select.value;
+                    const helpText = select.nextElementSibling;
+                    let descriptions = {};
+                    if(activeView === 'custodial' || activeView === 'grounds') {
+                       descriptions = {...appaLevels, '1': 'Level 1: Orderly Spotlessness', '2': 'Level 2: Ordinary Tidiness', '3': 'Level 3: Casual Inattention', '4': 'Level 4: Moderate Dinginess', '5': 'Level 5: Unkempt Neglect' };
+                    } else {
+                       descriptions = {...appaLevels, '1': 'Level 1: Like-New Condition', '2': 'Level 2: Good Condition', '3': 'Level 3: Fair Condition', '4': 'Level 4: Poor Condition', '5': 'Level 5: Critical/Failed Condition'};
+                    }
+                    helpText.textContent = descriptions[level];
+                }
+            }
+            
+            mainContent.addEventListener('change', handleAppaSelectChange);
+            
+            function switchView(view) {
+                activeView = view;
+                custodialView.classList.add('hidden');
+                maintenanceView.classList.add('hidden');
+                groundsView.classList.add('hidden');
+                showCustodialBtn.classList.remove('active');
+                showMaintenanceBtn.classList.remove('active');
+                showGroundsBtn.classList.remove('active');
+
+                if (view === 'custodial') {
+                    custodialView.classList.remove('hidden');
+                    showCustodialBtn.classList.add('active');
+                } else if (view === 'maintenance') {
+                    maintenanceView.classList.remove('hidden');
+                    showMaintenanceBtn.classList.add('active');
+                } else if (view === 'grounds') {
+                    groundsView.classList.remove('hidden');
+                    showGroundsBtn.classList.add('active');
+                }
+            }
+            
+            showCustodialBtn.addEventListener('click', () => switchView('custodial'));
+            showMaintenanceBtn.addEventListener('click', () => switchView('maintenance'));
+            showGroundsBtn.addEventListener('click', () => switchView('grounds'));
+
+            // Modal Logic
+            function showModal(title, content) {
+                modalTitle.textContent = title;
+                modalContent.innerHTML = content || '<p>No rubric available for this item.</p>';
+                helpModal.classList.remove('hidden');
+            }
+
+            function hideModal() {
+                helpModal.classList.add('hidden');
+            }
+
+            modalCloseBtn.addEventListener('click', hideModal);
+            helpModal.addEventListener('click', (e) => {
+                if (e.target === helpModal) {
+                    hideModal();
+                }
+            });
+
+            mainContent.addEventListener('click', (e) => {
+                if(e.target.classList.contains('help-btn')) {
+                    const item = e.target.dataset.item;
+                    showModal(item, allHelpContent[item]);
+                }
+            });
+
+            // Track ongoing API calls to prevent duplicates
+            const ongoingCalls = new Set();
+
+            async function callGeminiAPI(prompt, button) {
+                // !! IMPORTANT !! PASTE YOUR GEMINI API KEY HERE
+                const apiKey = "AIzaSyCxo29Q6HRHRzxTuTU_IanG9yvJmctdzb0"; 
+                
+                const targetId = button.dataset.target;
+                const targetTextarea = document.getElementById(targetId);
+                
+                // Prevent duplicate calls
+                if (ongoingCalls.has(targetId)) {
+                    console.log("API call already in progress for this field");
+                    return;
+                }
+
+                if (apiKey === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
+                    console.error("Gemini API key is not set.");
+                    targetTextarea.value = "Error: Gemini API key is not configured in the HTML file. Please add your key to use this feature.";
+                    return;
+                }
+
+                // Validate prompt
+                if (!prompt || prompt.trim().length === 0) {
+                    targetTextarea.value = "Error: No inspection data found to generate report. Please fill out the checklist first.";
+                    return;
+                }
+
+                // First, try to discover available models dynamically
+                let workingModel = null;
+                let apiUrl = null;
+                
+                // Try to get list of available models first
+                console.log("Discovering available Gemini models...");
+                const listEndpoints = [
+                    'https://generativelanguage.googleapis.com/v1beta/models',
+                    'https://generativelanguage.googleapis.com/v1/models'
+                ];
+                
+                for (const listEndpoint of listEndpoints) {
+                    try {
+                        const listResponse = await fetch(`${listEndpoint}?key=${apiKey}`);
+                        if (listResponse.ok) {
+                            const models = await listResponse.json();
+                            // Filter for Gemini models that support text generation, prioritize newer models
+                            const allModels = models.models?.filter(m => 
+                                m.supportedGenerationMethods?.includes('generateContent') &&
+                                (m.name.includes('gemini') && !m.name.includes('embedding'))
+                            ) || [];
+                            
+                            // Sort by preference: newest versions first
+                            const availableModels = allModels.sort((a, b) => {
+                                const aName = a.name.toLowerCase();
+                                const bName = b.name.toLowerCase();
+                                
+                                // Prioritize gemini-2.5 and gemini-2.0 models
+                                if (aName.includes('gemini-2.5') && !bName.includes('gemini-2.5')) return -1;
+                                if (bName.includes('gemini-2.5') && !aName.includes('gemini-2.5')) return 1;
+                                if (aName.includes('gemini-2.0') && !bName.includes('gemini-2.0')) return -1;
+                                if (bName.includes('gemini-2.0') && !aName.includes('gemini-2.0')) return 1;
+                                
+                                // Prefer 'flash' models (faster)
+                                if (aName.includes('flash') && !bName.includes('flash')) return -1;
+                                if (bName.includes('flash') && !aName.includes('flash')) return 1;
+                                
+                                return a.name.localeCompare(b.name);
+                            });
+                            
+                            if (availableModels && availableModels.length > 0) {
+                                // Use the first available model that supports generateContent
+                                workingModel = availableModels[0].name;
+                                const apiVersion = listEndpoint.includes('v1beta') ? 'v1beta' : 'v1';
+                                apiUrl = `https://generativelanguage.googleapis.com/${apiVersion}/${workingModel}:generateContent?key=${apiKey}`;
+                                console.log(`Found working model: ${workingModel}`);
+                                break;
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`ListModels failed for ${listEndpoint}:`, error.message);
+                        continue;
+                    }
+                }
+                
+                // If discovery failed, fall back to manual model names
+                if (!workingModel) {
+                    console.log("Model discovery failed, trying manual model names...");
+                    const fallbackModels = [
+                        { version: 'v1beta', model: 'models/gemini-1.5-flash' },
+                        { version: 'v1beta', model: 'models/gemini-1.5-pro' },
+                        { version: 'v1beta', model: 'models/gemini-pro' },
+                        { version: 'v1', model: 'models/gemini-1.5-flash' },
+                        { version: 'v1', model: 'models/gemini-pro' }
+                    ];
+                    
+                    workingModel = fallbackModels[0].model;
+                    apiUrl = `https://generativelanguage.googleapis.com/${fallbackModels[0].version}/${workingModel}:generateContent?key=${apiKey}`;
+                }
+                
+                // Mark this call as ongoing
+                ongoingCalls.add(targetId);
+                
+                button.disabled = true;
+                const originalText = button.innerHTML;
+                button.innerHTML = '✨ Thinking...';
+                
+                const payload = { 
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 4000, // Increased further for comprehensive reports
+                        topP: 0.9
+                    }
+                };
+
+                let responseText = '';
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'UND-Housing-Inspection-Tool/1.0'
+                        },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error("API Response Error:", response.status, errorText);
+                        
+                        // If we get a 404 for model not found, try fallback models
+                        if (response.status === 404 && errorText.includes('not found')) {
+                            console.log("Primary model not found, trying fallback models...");
+                            
+                            // Try to discover available models from the ListModels API
+                            let discoveredModels = [];
+                            
+                            // Try both API versions for model discovery
+                            for (const version of ['v1beta', 'v1']) {
+                                try {
+                                    const discoverResponse = await fetch(`https://generativelanguage.googleapis.com/${version}/models?key=${apiKey}`);
+                                    if (discoverResponse.ok) {
+                                        const models = await discoverResponse.json();
+                                        const geminiModels = models.models?.filter(m => 
+                                            m.supportedGenerationMethods?.includes('generateContent') &&
+                                            m.name.includes('gemini')
+                                        ) || [];
+                                        
+                                        for (const model of geminiModels) {
+                                            discoveredModels.push({ version, model: model.name });
+                                        }
+                                        console.log(`Found ${geminiModels.length} models in ${version}`);
+                                    }
+                                } catch (discoverError) {
+                                    console.log(`Model discovery failed for ${version}:`, discoverError.message);
+                                }
+                            }
+                            
+                            // If we found models via discovery, try those first
+                            const fallbackConfigs = discoveredModels.length > 0 ? discoveredModels : [
+                                // Manual fallback if discovery fails
+                                { version: 'v1beta', model: 'models/gemini-1.5-flash' },
+                                { version: 'v1beta', model: 'models/gemini-1.5-pro' },
+                                { version: 'v1beta', model: 'models/gemini-pro' },
+                                { version: 'v1', model: 'models/gemini-1.5-flash' },
+                                { version: 'v1', model: 'models/gemini-1.0-pro' },
+                                { version: 'v1', model: 'models/gemini-pro' }
+                            ];
+                            
+                            for (const config of fallbackConfigs) {
+                                try {
+                                    console.log(`Trying fallback: ${config.version}/${config.model}`);
+                                    // Ensure model name includes 'models/' prefix if not already present
+                                    const modelName = config.model.startsWith('models/') ? config.model : `models/${config.model}`;
+                                    apiUrl = `https://generativelanguage.googleapis.com/${config.version}/${modelName}:generateContent?key=${apiKey}`;
+                                    
+                                    const fallbackResponse = await fetch(apiUrl, {
+                                        method: 'POST',
+                                        headers: { 
+                                            'Content-Type': 'application/json',
+                                            'User-Agent': 'UND-Housing-Inspection-Tool/1.0'
+                                        },
+                                        body: JSON.stringify(payload),
+                                        signal: controller.signal
+                                    });
+                                    
+                                    if (fallbackResponse.ok) {
+                                        console.log(`✅ Success with: ${config.version}/${modelName}`);
+                                        const fallbackResult = await fallbackResponse.json();
+                                        if (fallbackResult.candidates && fallbackResult.candidates.length > 0 && fallbackResult.candidates[0].content && fallbackResult.candidates[0].content.parts && fallbackResult.candidates[0].content.parts.length > 0) {
+                                            responseText = fallbackResult.candidates[0].content.parts[0].text || 'Could not generate a response.';
+                                            targetTextarea.value = responseText;
+                                            return; // Success with fallback model
+                                        } else {
+                                            console.log(`✅ Model responded but unexpected format:`, fallbackResult);
+                                        }
+                                    } else {
+                                        const errorText = await fallbackResponse.text();
+                                        console.log(`❌ ${config.version}/${modelName} failed: ${fallbackResponse.status}`);
+                                        console.log(`   Response: ${errorText.substring(0, 100)}`);
+                                    }
+                                } catch (fallbackError) {
+                                    console.log(`❌ ${config.version}/${config.model} error:`, fallbackError.message);
+                                    continue; // Try next model
+                                }
+                            }
+                            
+                            // If all fallback models failed, provide helpful diagnostic message
+                            console.log("All Gemini models failed. Run debugInspectionTool.validateAPIKey() for diagnosis.");
+                            throw new Error(`All Gemini models failed. This could be due to:
+• API key issues (expired/invalid)  
+• API quota exceeded
+• Temporary service outage
+• Network connectivity problems
+
+Try running debugInspectionTool.validateAPIKey() in the console for more details.`);
+                        } else if (response.status === 429) {
+                            throw new Error("Rate limit exceeded. Please wait a moment and try again.");
+                        } else if (response.status === 403) {
+                            throw new Error("API key may be invalid or quota exceeded.");
+                        } else if (response.status >= 500) {
+                            throw new Error("Server error. Please try again in a few minutes.");
+                        } else {
+                            throw new Error(`API Error: ${response.status} - ${errorText}`);
+                        }
+                    }
+
+                    const result = await response.json();
+                    console.log("API Response:", result); // Debug logging
+                    console.log("First candidate:", result.candidates[0]); // More detailed logging
+                    
+                    // Validate response structure more thoroughly
+                    if (!result.candidates || !Array.isArray(result.candidates) || result.candidates.length === 0) {
+                        console.error("No candidates in API response:", result);
+                        throw new Error("AI service returned no response candidates. Please try again.");
+                    }
+                    
+                    const candidate = result.candidates[0];
+                    
+                    // Handle different finish reasons
+                    if (candidate.finishReason === 'MAX_TOKENS') {
+                        console.warn("Response was truncated due to token limit. Response may be incomplete.");
+                    } else if (candidate.finishReason === 'SAFETY') {
+                        throw new Error("Response was blocked for safety reasons. Please try rephrasing your request.");
+                    } else if (candidate.finishReason === 'RECITATION') {
+                        throw new Error("Response was blocked due to recitation concerns. Please try again.");
+                    }
+                    
+                    if (!candidate.content || !candidate.content.parts || !Array.isArray(candidate.content.parts) || candidate.content.parts.length === 0) {
+                        console.error("Invalid candidate structure:", candidate);
+                        throw new Error("AI response format is invalid. Please try again.");
+                    }
+
+                    responseText = candidate.content.parts[0].text || 'Could not generate a response.';
+                    
+                    // Handle truncated responses
+                    if (candidate.finishReason === 'MAX_TOKENS' && responseText.length > 0) {
+                        responseText += "\n\n[Note: Response was truncated due to length. Consider running the analysis again or breaking down into smaller sections.]";
+                    }
+                    
+                    // Basic validation of response content
+                    if (responseText.length < 10) {
+                        throw new Error("Received unusually short response. Please try again.");
+                    }
+
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    console.error("Gemini API call failed:", error);
+                    
+                    if (error.name === 'AbortError') {
+                        responseText = 'Request timed out. Please try again with a shorter inspection report.';
+                    } else if (error.message.includes('Rate limit')) {
+                        responseText = 'Too many requests. Please wait a moment and try again.';
+                    } else if (error.message.includes('quota')) {
+                        responseText = 'API quota exceeded. Please try again later or contact administrator.';
+                    } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                        responseText = 'Network error. Please check your connection and try again.';
+                    } else if (error.message.includes('All Gemini models failed')) {
+                        if (button.dataset.type === 'comprehensive') {
+                            responseText = `AI service is currently unavailable. Please manually complete this comprehensive APPA assessment.
+
+MANUAL APPA ASSESSMENT TEMPLATE:
+
+**OVERALL APPA LEVEL**: [Assign 1-5 based on findings]
+
+**STRENGTHS**:
+• [List Level 1-2 items and positive observations]
+
+**PRIORITY CONCERNS**:
+• [List Level 4-5 items requiring immediate attention]
+
+**RECOMMENDATIONS**:
+• [Specific action items for improvement]
+
+**ASSESSMENT NOTES**:
+• [Overall condition and management effectiveness]
+
+Edit this template with your specific inspection findings.`;
+                        } else {
+                            responseText = `AI service is currently unavailable. Please fill this section manually for now.
+
+Common ${button.dataset.type === 'success' ? 'success areas' : 'improvement areas'} to consider:
+${button.dataset.type === 'success' ? 
+  '• Areas with Level 1-2 ratings show excellent maintenance\n• Clean, well-maintained facilities\n• Properly functioning systems and equipment' : 
+  '• Address any Level 4-5 issues immediately (safety priority)\n• Schedule repairs for Level 3 items\n• Consider preventive maintenance for aging systems\n• Update cleaning schedules for problem areas'
+}
+
+You can manually edit this text with your specific observations.`;
+                        }
+                    } else {
+                        responseText = `Error: ${error.message}`;
+                    }
+                } finally {
+                    // Clean up
+                    ongoingCalls.delete(targetId);
+                    button.disabled = false;
+                    button.innerHTML = originalText;
+                    clearTimeout(timeoutId);
+                }
+                
+                targetTextarea.value = responseText;
+            }
+
+            document.querySelectorAll('.gemini-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    // Prevent default behavior and multiple clicks
+                    event.preventDefault();
+                    if (button.disabled) {
+                        return;
+                    }
+
+                    let checklistContainer, building, evaluationType;
+                    let findings = [];
+                    let prompt = '';
+
+                    try {
+                        if (activeView === 'custodial') {
+                            checklistContainer = custodialChecklistContainer;
+                            building = document.getElementById('custodial-building').value || 'the building';
+                            evaluationType = 'custodial';
+                        } else if (activeView === 'maintenance') {
+                            checklistContainer = maintenanceChecklistContainer;
+                            building = document.getElementById('maintenance-building').value || 'the building';
+                            evaluationType = 'maintenance';
+                        } else {
+                            checklistContainer = groundsChecklistContainer;
+                            building = document.getElementById('grounds-building').value || 'the area';
+                            evaluationType = 'grounds';
+                        }
+
+                        // Gather all findings from the checklist
+                        checklistContainer.querySelectorAll('select.appa-level-select').forEach(select => {
+                            const itemWrapper = select.closest('.p-4');
+                            if (itemWrapper) {
+                                const labelElement = itemWrapper.querySelector('label');
+                                const textareaElement = itemWrapper.querySelector('textarea');
+                                
+                                if (labelElement) {
+                                    const item = labelElement.textContent.trim();
+                                    const level = select.value;
+                                    const notes = textareaElement ? textareaElement.value.trim() : '';
+                                    
+                                    if (level !== '0') {
+                                        findings.push({ item, rating: `Level ${level}`, notes });
+                                    }
+                                }
+                            }
+                        });
+
+                        // Validate that we have some data to work with
+                        if (findings.length === 0) {
+                            const targetTextarea = document.getElementById(button.dataset.target);
+                            targetTextarea.value = "Please complete some checklist items before generating a report.";
+                            return;
+                        }
+
+                        if (button.dataset.type === 'comprehensive') {
+                            // Generate comprehensive APPA analysis
+                            if (findings.length === 0) {
+                                document.getElementById(button.dataset.target).value = "Please complete some checklist items before generating an AI report.";
+                                return;
+                            }
+                            
+                            // Organize findings by rating level
+                            const level1 = findings.filter(f => f.rating === 'Level 1');
+                            const level2 = findings.filter(f => f.rating === 'Level 2');
+                            const level3 = findings.filter(f => f.rating === 'Level 3');
+                            const level4 = findings.filter(f => f.rating === 'Level 4');
+                            const level5 = findings.filter(f => f.rating === 'Level 5');
+                            
+                            const allFindingsText = findings.map(f => {
+                                let line = `- ${f.item}: ${f.rating}`;
+                                if (f.notes) line += ` (Inspector Notes: ${f.notes})`;
+                                return line;
+                            }).join('\n');
+                            
+                            prompt = `You are a facilities management expert analyzing ${evaluationType} inspection data for ${building} using APPA standards.
+
+**INSPECTION SUMMARY:**
+• Level 1: ${level1.length} items
+• Level 2: ${level2.length} items  
+• Level 3: ${level3.length} items
+• Level 4: ${level4.length} items
+• Level 5: ${level5.length} items
+
+**DETAILED FINDINGS:**
+${allFindingsText}
+
+**PROVIDE CONCISE ANALYSIS:**
+
+**OVERALL APPA LEVEL:** [Assign 1-5 with 2-sentence justification]
+
+**STRENGTHS:** [List 2-3 key Level 1-2 achievements]
+
+**URGENT ISSUES:** [List Level 4-5 items requiring immediate action]
+
+**ACTION PLAN:** [3-4 specific, prioritized recommendations]
+
+**MANAGEMENT ASSESSMENT:** [Brief comment on facility management effectiveness]
+
+Keep response under 400 words. Focus on actionable insights and APPA compliance.`;
+
+                        } else if (button.dataset.type === 'success') {
+                            // Legacy support - should not be used with new interface
+                            const goodFindings = findings.filter(f => ['Level 1', 'Level 2'].includes(f.rating));
+                            
+                            if (goodFindings.length === 0) {
+                                document.getElementById(button.dataset.target).value = "No items with high ratings (Level 1 or 2) were found to summarize.";
+                                return;
+                            }
+                            
+                            const goodFindingsText = goodFindings.map(f => {
+                                let line = `- ${f.item}: ${f.rating}`;
+                                if (f.notes) line += ` (Notes: ${f.notes})`;
+                                return line;
+                            }).join('\n');
+                            
+                            prompt = `Act as a facilities manager writing a positive report summary. Based on the following excellent ${evaluationType} inspection findings for ${building}, write a brief, professional paragraph summarizing the areas where the team is excelling. Keep it positive and specific, mentioning 1-2 examples from the list.
+
+EXCELLENT FINDINGS:
+${goodFindingsText}
+
+Write a concise, professional paragraph (3-4 sentences maximum) that highlights these achievements.`;
+
+                        } else { // improvement - legacy support
+                            const badFindings = findings.filter(f => ['Level 3', 'Level 4', 'Level 5'].includes(f.rating));
+                            
+                            if (badFindings.length === 0) {
+                                document.getElementById(button.dataset.target).value = "No items needing improvement (Level 3, 4, or 5) were found.";
+                                return;
+                            }
+                            
+                            const badFindingsText = badFindings.map(f => {
+                                let line = `- ${f.item}: ${f.rating}`;
+                                if (f.notes) line += ` (Inspector Notes: ${f.notes})`;
+                                return line;
+                            }).join('\n');
+                            
+                            prompt = `Act as a facilities manager creating action items for ${building}. Based on the following ${evaluationType} inspection findings that need attention, generate a concise, bulleted list of specific action items for the team. Focus on clarity and actionability. Prioritize Level 4-5 issues and any safety concerns mentioned in notes.
+
+FINDINGS REQUIRING ATTENTION:
+${badFindingsText}
+
+Format your response as clear, actionable bullet points. Be specific about what needs to be done.`;
+                        }
+
+                        // Final validation before API call
+                        if (!prompt || prompt.trim().length < 50) {
+                            const targetTextarea = document.getElementById(button.dataset.target);
+                            targetTextarea.value = "Error: Unable to generate prompt. Please ensure checklist items are properly filled out.";
+                            return;
+                        }
+
+                        await callGeminiAPI(prompt, button);
+
+                    } catch (error) {
+                        console.error("Error in button click handler:", error);
+                        const targetTextarea = document.getElementById(button.dataset.target);
+                        targetTextarea.value = "Error processing request. Please try again.";
+                        
+                        // Re-enable button if it got stuck
+                        button.disabled = false;
+                        button.innerHTML = button.innerHTML.replace('✨ Thinking...', '✨ Summarize Successes').replace('✨ Thinking...', '✨ Suggest Improvements');
+                    }
+                });
+            });
+            
+            function generateEmailHTML(data) {
+                let reportContent = `
+                    <h1 style="font-family: sans-serif; font-size: 24px; font-weight: bold; margin-bottom: 20px;">${data.title}</h1>
+                    <p style="font-family: sans-serif;"><strong>Building/Area:</strong> ${data.building || 'N/A'}</p>
+                    <p style="font-family: sans-serif;"><strong>Inspection Date:</strong> ${data.date || 'N/A'}</p>
+                    <p style="font-family: sans-serif;"><strong>Submission Date:</strong> ${new Date().toLocaleString()}</p>
+                    <p style="font-family: sans-serif;"><strong>Inspector:</strong> ${data.inspector || 'N/A'}</p>
+                    <hr style="margin: 20px 0;">
+                `;
+
+                data.details.forEach(detail => {
+                    reportContent += `
+                        <div style="margin-top: 10px; font-family: sans-serif;">
+                            <p><strong>${detail.item}:</strong> ${detail.rating}</p>
+                            ${detail.notes ? `<p style="font-style: italic; color: #555; margin-left:15px;">Notes: ${detail.notes}</p>` : ''}
+                        </div>
+                    `;
+                });
+                
+                reportContent += `<hr style="margin: 20px 0;"><h3>AI Analysis & APPA Assessment</h3>`;
+                reportContent += `<div style="font-family: sans-serif; white-space: pre-line; background-color: #f8f9fa; padding: 15px; border-left: 4px solid #009A44; margin: 10px 0;">${data.aiReport || 'No AI analysis generated.'}</div>`;
+                
+                return reportContent;
+            }
+
+            submitAndEmailBtn.addEventListener('click', async function() {
+                // !! IMPORTANT !! PASTE YOUR POWER AUTOMATE URL HERE
+                const powerAutomateUrl = 'https://defaultec37a091b9a647e598d0903d4a4192.03.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/da9ca2f832b44a5fb19f50d0462068b3/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-sb1eRCUppSwjFPD_zX02_25KpU78k4QIbZwjDffrQU';
+
+                if (powerAutomateUrl === 'PASTE_YOUR_URL_HERE') {
+                    statusMessage.textContent = 'Error: Power Automate URL is not set in the HTML file.';
+                    statusMessage.style.color = 'red';
+                    return; 
+                }
+
+                submitAndEmailBtn.disabled = true;
+
+                let payload = {};
+                let reportData = { details: [] };
+                let checklistContainer, buildingElem, dateElem, inspectorElem, aiReportElem;
+
+                if (activeView === 'custodial') {
+                    payload.type = 'custodial';
+                    reportData.title = 'Custodial Evaluation Report';
+                    checklistContainer = custodialChecklistContainer;
+                    buildingElem = document.getElementById('custodial-building');
+                    dateElem = document.getElementById('custodial-date');
+                    inspectorElem = document.getElementById('custodial-inspector');
+                    aiReportElem = document.getElementById('custodial-ai-report');
+                } else if (activeView === 'maintenance') {
+                    payload.type = 'maintenance';
+                    reportData.title = 'Maintenance Evaluation Report';
+                    checklistContainer = maintenanceChecklistContainer;
+                    buildingElem = document.getElementById('maintenance-building');
+                    dateElem = document.getElementById('maintenance-date');
+                    inspectorElem = document.getElementById('maintenance-inspector');
+                    aiReportElem = document.getElementById('maintenance-ai-report');
+                } else { // Grounds
+                    payload.type = 'grounds';
+                    reportData.title = 'Grounds Evaluation Report';
+                    checklistContainer = groundsChecklistContainer;
+                    buildingElem = document.getElementById('grounds-building');
+                    dateElem = document.getElementById('grounds-date');
+                    inspectorElem = document.getElementById('grounds-inspector');
+                    aiReportElem = document.getElementById('grounds-ai-report');
+                }
+
+                payload.building = buildingElem.value;
+                payload.date = dateElem.value;
+                payload.inspector = inspectorElem.value;
+                payload.aiReport = aiReportElem.value;
+                payload.details = [];
+                
+                Object.assign(reportData, { building: payload.building, date: payload.date, inspector: payload.inspector, aiReport: payload.aiReport });
+
+                checklistContainer.querySelectorAll('select.appa-level-select').forEach(select => {
+                    const itemWrapper = select.closest('.p-4');
+                    const item = itemWrapper.querySelector('label').textContent;
+                    const ratingValue = select.value;
+                    const notesValue = itemWrapper.querySelector('textarea').value;
+                    if (ratingValue !== '0' || notesValue) {
+                        const itemData = {
+                            item: item,
+                            rating: `Level ${ratingValue}`,
+                            notes: notesValue
+                        };
+                        payload.details.push(itemData);
+                        reportData.details.push(itemData);
+                    }
+                });
+                
+                payload.emailReportHTML = generateEmailHTML(reportData);
+
+                statusMessage.style.color = '#009A44'; // UND Green
+                statusMessage.textContent = 'Submitting to SharePoint and sending email...';
+                
+                try {
+                    const response = await fetch(powerAutomateUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (response.ok) {
+                        statusMessage.style.color = '#009A44'; // UND Green
+                        statusMessage.textContent = 'Successfully submitted and email sent!';
+                    } else {
+                        throw new Error(`Server responded with status: ${response.status}`);
+                    }
+                } catch (error) {
+                    statusMessage.style.color = 'red';
+                    statusMessage.textContent = 'Error during submission. See console for details.';
+                    console.error('Submission Error:', error);
+                }
+
+                setTimeout(() => {
+                    submitAndEmailBtn.disabled = false;
+                    if (statusMessage.style.color !== 'red') {
+                       statusMessage.textContent = '';
+                    }
+                }, 4000);
+            });
+        });
+        debugInspectionTool.testAvailableModels()
+    </script>
+</body>
+</html>
+
