@@ -4,13 +4,18 @@ import json
 from datetime import datetime
 import pandas as pd
 
-# Optional database import
+DATABASE_AVAILABLE = False
 try:
     from database import InspectionDatabase
-    DATABASE_AVAILABLE = True
-except ImportError as e:
-    DATABASE_AVAILABLE = False
+    import streamlit as st
+    db_secret = st.secrets.get("database", {}).get("connection_string", None)
+    if db_secret:
+        DATABASE_AVAILABLE = True
+    else:
+        InspectionDatabase = None
+except Exception:
     InspectionDatabase = None
+    DATABASE_AVAILABLE = False
 
 # File storage fallback
 from file_storage import FileStorage
@@ -362,8 +367,7 @@ def main():
         st.subheader("Database Settings")
         
         if not DATABASE_AVAILABLE:
-            st.warning("SQL Database not available. Using file-based storage instead.")
-            st.info("File-based storage saves inspections as JSON files locally.")
+            st.info("Database features are disabled. All inspection data will be stored in local files only.")
             use_database = False
             use_file_storage = st.checkbox("Enable File Storage", value=True, help="Save inspections to local JSON files")
         else:
@@ -636,14 +640,14 @@ def main():
                 sharepoint_success, sharepoint_message = submit_to_sharepoint(submission_data)
             
             # Database submission (if enabled and available)
-            if DATABASE_AVAILABLE and hasattr(st.session_state, 'db_connection_string'):
+            if DATABASE_AVAILABLE and hasattr(st.session_state, 'db_connection_string') and use_database:
                 with st.spinner("Saving to SQL database..."):
                     db = InspectionDatabase(st.session_state.db_connection_string)
                     db_success, db_message = save_to_database(submission_data, db)
             
             # File storage (if enabled or as fallback)
             use_file_storage = st.session_state.get('use_file_storage', not DATABASE_AVAILABLE)
-            if use_file_storage:
+            if use_file_storage or not DATABASE_AVAILABLE:
                 with st.spinner("Saving to local files..."):
                     file_storage = FileStorage()
                     file_success, file_message = file_storage.save_inspection(submission_data)
@@ -660,13 +664,13 @@ def main():
             
             with cols[1]:
                 st.subheader("💾 SQL Database")
-                if DATABASE_AVAILABLE and hasattr(st.session_state, 'db_connection_string'):
+                if DATABASE_AVAILABLE and hasattr(st.session_state, 'db_connection_string') and use_database:
                     if db_success:
                         st.success(db_message)
                     else:
                         st.error(db_message)
                 else:
-                    st.info("SQL database not configured")
+                    st.info("SQL database not configured or disabled")
             
             with cols[2]:
                 st.subheader("📁 File Storage")
@@ -684,7 +688,7 @@ def main():
         st.subheader("📊 Recent Inspections")
         
         # Show data from available storage
-        if DATABASE_AVAILABLE and hasattr(st.session_state, 'db_connection_string'):
+        if DATABASE_AVAILABLE and hasattr(st.session_state, 'db_connection_string') and st.session_state.get('use_database', False):
             # Show SQL database data
             db = InspectionDatabase(st.session_state.db_connection_string)
             inspections = db.get_inspections(limit=10)
