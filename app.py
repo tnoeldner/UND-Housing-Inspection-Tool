@@ -98,6 +98,15 @@ if "app_state" not in st.session_state or st.session_state.get("app_state") == "
                 st.error("Please enter both email and password.")
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # Debug: Show session state after login
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.write("**Session State Debug:**")
+    st.write({
+        "user_email": st.session_state.get("user_email"),
+        "is_admin": st.session_state.get("is_admin"),
+        "app_state": st.session_state.get("app_state")
+    })
+
 if st.session_state.get("app_state") == "view_reports":
     # Add Return to Main Page button at the top
     if st.button("Return to Main Page", key="return_home_view_reports"):
@@ -608,6 +617,14 @@ if st.session_state["app_state"] == "home":
     inject_custom_css()
     app_header()
     st.markdown("<div class='app-card' style='margin-top:32px; max-width:400px; margin-left:auto; margin-right:auto;'>", unsafe_allow_html=True)
+    # Debug: Show session state on home screen
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.write("**Session State Debug:**")
+    st.write({
+        "user_email": st.session_state.get("user_email"),
+        "is_admin": st.session_state.get("is_admin"),
+        "app_state": st.session_state.get("app_state")
+    })
     if st.button("Start New Inspection", use_container_width=True, key="btn_new_inspection"):
         st.session_state["app_state"] = "select_type"
         st.rerun()
@@ -641,11 +658,13 @@ if st.session_state.get("app_state") == "admin_page" and st.session_state.get("i
         submitted = st.form_submit_button("Add User")
         if submitted:
             if email and first_name and last_name and password:
+                import bcrypt
+                password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 conn = get_conn()
                 cur = conn.cursor()
                 try:
-                    cur.execute("INSERT INTO users (email, first_name, last_name, position, is_admin) VALUES (%s, %s, %s, %s, %s)",
-                                (email, first_name, last_name, position, is_admin))
+                    cur.execute("INSERT INTO users (email, first_name, last_name, position, password_hash, is_admin) VALUES (%s, %s, %s, %s, %s, %s)",
+                                (email, first_name, last_name, position, password_hash, is_admin))
                     conn.commit()
                     st.success(f"User '{email}' added successfully.")
                 except Exception as e:
@@ -680,11 +699,18 @@ if st.session_state.get("app_state") == "admin_page" and st.session_state.get("i
             update_submitted = st.form_submit_button("Update User")
             delete_submitted = st.form_submit_button("Delete User")
             if update_submitted:
+                import bcrypt
                 conn = get_conn()
                 cur = conn.cursor()
                 try:
-                    cur.execute("UPDATE users SET first_name = %s, last_name = %s, position = %s, is_admin = %s WHERE email = %s",
-                                (new_first_name, new_last_name, new_position, new_is_admin, email))
+                    # Always preserve is_admin value
+                    if new_password:
+                        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                        cur.execute("UPDATE users SET first_name = %s, last_name = %s, position = %s, is_admin = %s, password_hash = %s WHERE email = %s",
+                                    (new_first_name, new_last_name, new_position, int(new_is_admin), password_hash, email))
+                    else:
+                        cur.execute("UPDATE users SET first_name = %s, last_name = %s, position = %s, is_admin = %s WHERE email = %s",
+                                    (new_first_name, new_last_name, new_position, int(new_is_admin), email))
                     conn.commit()
                     st.success(f"User '{email}' updated.")
                 except Exception as e:
