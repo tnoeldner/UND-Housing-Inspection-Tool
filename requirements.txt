@@ -5,3 +5,16 @@ google-generativeai>=0.3.0
 pyodbc>=4.0.39
 psycopg2-binary>=2.9.9
 python-dotenv>=1.0.0
+bcrypt>=4.0.0
+# If you use authentication, also consider:
+# passlib>=1.7.4
+# If you use image handling:
+# Pillow>=10.0.0
+# If you use Excel export:
+# openpyxl>=3.1.2
+# If you use JSON file storage:
+# (json is built-in, no package needed)
+# If you use database integration:
+# pyodbc and psycopg2-binary are already included
+# If you use environment variables:
+# python-dotenv is already included
