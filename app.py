@@ -98,14 +98,6 @@ if "app_state" not in st.session_state or st.session_state.get("app_state") == "
                 st.error("Please enter both email and password.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Debug: Show session state after login
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.write("**Session State Debug:**")
-    st.write({
-        "user_email": st.session_state.get("user_email"),
-        "is_admin": st.session_state.get("is_admin"),
-        "app_state": st.session_state.get("app_state")
-    })
 
 if st.session_state.get("app_state") == "view_reports":
     # Add Return to Main Page button at the top
@@ -617,14 +609,6 @@ if st.session_state["app_state"] == "home":
     inject_custom_css()
     app_header()
     st.markdown("<div class='app-card' style='margin-top:32px; max-width:400px; margin-left:auto; margin-right:auto;'>", unsafe_allow_html=True)
-    # Debug: Show session state on home screen
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.write("**Session State Debug:**")
-    st.write({
-        "user_email": st.session_state.get("user_email"),
-        "is_admin": st.session_state.get("is_admin"),
-        "app_state": st.session_state.get("app_state")
-    })
     if st.button("Start New Inspection", use_container_width=True, key="btn_new_inspection"):
         st.session_state["app_state"] = "select_type"
         st.rerun()
