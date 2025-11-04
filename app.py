@@ -1,17 +1,50 @@
-def get_all_inspection_ids():
+# --- Load Inspection Details ---
+def load_inspection(inspection_id):
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id FROM inspections ORDER BY inspection_date DESC LIMIT 50")
-    ids = [row[0] for row in cur.fetchall()]
+    cur.execute("SELECT id, building, inspector, inspection_type, inspection_date FROM inspections WHERE id = %s", (inspection_id,))
+    row = cur.fetchone()
+    inspection = {
+        "id": row[0],
+        "building": row[1],
+        "inspector": row[2],
+        "inspection_type": row[3],
+        "inspection_date": row[4]
+    } if row else {}
+    cur.execute("SELECT id, category, item, rating, notes FROM inspection_items WHERE inspection_id = %s", (inspection_id,))
+    items = []
+    for r in cur.fetchall():
+        item_id, category, item, rating, notes = r
+        # Fetch all photos for this item
+        cur.execute("SELECT photo FROM inspection_item_photos WHERE inspection_item_id = %s", (item_id,))
+        photos = [p[0] for p in cur.fetchall() if p[0]]
+        items.append({
+            "category": category,
+            "item": item,
+            "rating": rating,
+            "notes": notes,
+            "photos": photos
+        })
     cur.close()
     conn.close()
-    return ids
+    return inspection, items
+# --- Database connection ---
+import psycopg2
+from datetime import date
+from report_utils import format_items_table, generate_pdf_report
+def get_conn():
+    db = st.secrets["database"]
+    return psycopg2.connect(
+        dbname=db["NEON_DB_NAME"],
+        user=db["NEON_DB_USER"],
+        password=db["NEON_DB_PASSWORD"],
+        host=db["NEON_DB_HOST"],
+        port=db["NEON_DB_PORT"]
+    )
 
-
-# Gemini Pro Vision image analysis
-import base64
+# Ensure Streamlit is imported before any usage
 import streamlit as st
-import base64
+
 def inject_custom_css():
     st.markdown(
         '''<style>
@@ -36,49 +69,114 @@ def app_header():
             <div style="font-size:1.2rem; font-weight:400; margin-bottom:0.5em;">Facilities Management &amp; Inspections</div>
         </div>''', unsafe_allow_html=True)
 
-def app_footer():
-    st.markdown(
-        '''<div class="app-footer">
-            &copy; 2025 University of North Dakota &mdash; Housing Facilities<br>
-            <span style="font-size:0.95rem;">For support, contact <a href="mailto:facilities@und.edu">facilities@und.edu</a></span>
-        </div>''', unsafe_allow_html=True)
-import bcrypt
-def authenticate_user():
-        st.markdown("# Login Required")
-        with st.form("login_form"):
-            email = st.text_input("Email", value="")
-            password = st.text_input("Password", value="", type="password")
-            submitted = st.form_submit_button("Login")
-            if submitted:
-                if email and password:
-                    conn = get_conn()
-                    cur = conn.cursor()
-                    cur.execute("SELECT email, password_hash, first_name, last_name, position, is_admin FROM users WHERE email = %s", (email,))
-                    user = cur.fetchone()
-                    cur.close()
-                    conn.close()
-                    if user and bcrypt.checkpw(password.encode(), user[1].encode()):
-                        st.session_state["user_email"] = user[0]
-                        st.session_state["user_name"] = f"{user[2]} {user[3]}"
-                        st.session_state["user_position"] = user[4]
-                        st.session_state["is_admin"] = user[5]
-                        st.session_state["app_state"] = "home"
-                        st.success(f"Login successful! Email: {user[0]} | Name: {user[2]} {user[3]}")
-                        st.rerun()
-                    else:
-                        st.error("Invalid email or password.")
-                else:
-                    st.error("Please enter both email and password.")
-        st.stop()
-st.set_page_config(
-    page_title="UND Housing Inspection Tool",
-    page_icon="🏠",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-inject_custom_css()
-if st.session_state.get("app_state") == "home":
+# --- Login Screen Logic ---
+if "app_state" not in st.session_state or st.session_state.get("app_state") == "login":
+    inject_custom_css()
     app_header()
+    st.markdown("<div class='app-card' style='margin-top:32px;'>", unsafe_allow_html=True)
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        if submitted:
+            # Replace with your authentication logic
+            if email and password:
+                # Check if user is admin
+                conn = get_conn()
+                cur = conn.cursor()
+                cur.execute("SELECT is_admin FROM users WHERE email = %s", (email,))
+                row = cur.fetchone()
+                is_admin = bool(row[0]) if row else False
+                cur.close()
+                conn.close()
+                st.session_state["user_email"] = email
+                st.session_state["is_admin"] = is_admin
+                st.session_state["app_state"] = "home"
+                st.success(f"Login successful! Email: {email}")
+                st.rerun()
+            else:
+                st.error("Please enter both email and password.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+if st.session_state.get("app_state") == "view_reports":
+    # Add Return to Main Page button at the top
+    if st.button("Return to Main Page", key="return_home_view_reports"):
+        st.session_state["app_state"] = "home"
+        st.rerun()
+    st.set_page_config(
+        page_title="UND Housing Inspection Tool",
+        page_icon="🏠",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+    inject_custom_css()
+    # Show filters and list of reports
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT building FROM inspections ORDER BY building")
+    buildings = [row[0] for row in cur.fetchall() if row[0]]
+    cur.execute("SELECT DISTINCT inspector FROM inspections WHERE inspector IS NOT NULL AND inspector <> '' ORDER BY inspector")
+    inspectors = [row[0] for row in cur.fetchall() if row[0]]
+    building_filter = st.selectbox("Building", ["All"] + buildings)
+    inspector_filter = st.selectbox("Inspector", ["All"] + inspectors)
+    inspection_types = ["All", "Custodial", "Maintenance", "Grounds"]
+    inspection_type_filter = st.selectbox("Inspection Type", inspection_types)
+    date_filter = st.date_input("Date", value=None)
+    # Query inspections with filters
+    query = "SELECT id, building, inspection_date, inspector, inspection_type FROM inspections WHERE 1=1"
+    params = []
+    if building_filter != "All":
+        query += " AND building = %s"
+        params.append(building_filter)
+    if inspector_filter != "All":
+        query += " AND inspector ILIKE %s"
+        params.append(inspector_filter)
+    if inspection_type_filter != "All":
+        query += " AND inspection_type = %s"
+        params.append(inspection_type_filter)
+    if date_filter:
+        query += " AND inspection_date = %s"
+        params.append(date_filter)
+    query += " ORDER BY inspection_date DESC LIMIT 20"
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    if not rows:
+        st.info("No inspections found for selected filters.")
+    else:
+        report_options = {f"{row[4]} | {row[1]} | {row[2]} | {row[3]}": row[0] for row in rows}
+        selected_label = st.selectbox("Select a report to view", list(report_options.keys()))
+        selected_report_id = report_options[selected_label]
+        st.session_state["selected_report_id"] = selected_report_id
+        # Show inspection items table before AI summary
+        inspection, items = load_inspection(selected_report_id)
+        items_table = [(i['category'], i['item'], i['rating'], i['notes']) for i in items]
+        if items_table:
+            st.markdown("#### Inspection Items Table:")
+            st.markdown(format_items_table(items_table), unsafe_allow_html=True)
+        else:
+            st.info("No inspection items found for this report.")
+        # Show report details
+        conn = get_conn()
+        cur = conn.cursor()
+        ai_report = None
+        try:
+            cur.execute("SELECT ai_report FROM inspections WHERE id = %s", (selected_report_id,))
+            ai_row = cur.fetchone()
+            if ai_row and ai_row[0] is not None:
+                ai_report = ai_row[0]
+        except Exception:
+            ai_report = None
+        st.markdown("#### AI Summary:")
+        if ai_report:
+            st.markdown(ai_report)
+        else:
+            st.info("No AI summary available for this inspection.")
+        st.markdown("---")
+        st.info("To print or save this report, use your browser's Print function (Ctrl+P or File > Print). All details including the AI summary and tables will be included.")
+        cur.close()
+        conn.close()
 import requests
 
 # Gemini Pro Vision image analysis
@@ -202,9 +300,6 @@ def convert_markdown_to_html(text):
 import streamlit as st
 edit_id = st.session_state.get("edit_id")
 def clear_checklist_widget_state(checklist_data):
-    # Debug: show raw loaded inspection data and items before checklist loop
-    st.caption(f"[DEBUG] Raw loaded inspection data: {locals().get('inspection_data', 'N/A')}")
-    st.caption(f"[DEBUG] Raw loaded items: {locals().get('items', 'N/A')}")
     for category, items in checklist_data.items():
         for item in items:
             rating_key = f"{category}_{item}_rating"
@@ -309,21 +404,16 @@ def fetch_inspections(building=None, inspector=None, date_filter=None):
     cur = conn.cursor()
     query = "SELECT id, building, inspection_date, inspector FROM inspections WHERE 1=1"
     params = []
-    if building:
-        query += " AND building = %s"
-        params.append(building)
-    if inspector:
-        query += " AND inspector = %s"
-        params.append(inspector)
-    if date_filter:
-        query += " AND inspection_date = %s"
-        params.append(date_filter)
     query += " ORDER BY inspection_date DESC LIMIT 20"
     cur.execute(query, params)
     rows = cur.fetchall()
     cur.close()
     conn.close()
     return rows
+
+
+
+
 
 # --- Load Inspection Details ---
 def load_inspection(inspection_id):
@@ -398,9 +488,8 @@ try:
     photo_count = cur.fetchone()[0]
     cur.close()
     conn.close()
-    st.sidebar.write(f"[DEBUG] Total photos in DB: {photo_count}")
 except Exception as e:
-    st.sidebar.write(f"[DEBUG] Photo count error: {e}")
+    pass
 if st.sidebar.button("New Inspection"):
     st.session_state._new_form_triggered = True
     st.session_state._edit_form_triggered = False
@@ -486,7 +575,6 @@ if st.session_state.get('_edit_form_triggered', False):
                 rid, bldg, dt, insp = result
                 form_type = "Unknown"
             st.sidebar.markdown(f"<b>{form_type}</b> | <b>{bldg}</b> | {dt} | {insp}", unsafe_allow_html=True)
-            st.sidebar.write(f"[DEBUG] Result: {result}")
             edit_btn_key = f"edit_{rid}_btn"
             if st.sidebar.button(f"Edit", key=edit_btn_key):
                 st.session_state["edit_id"] = rid
@@ -514,34 +602,31 @@ if st.session_state.get('_edit_form_triggered', False):
 if "app_state" not in st.session_state:
     st.session_state["app_state"] = "login"
 if st.session_state["app_state"] == "login":
-    app_header()
-    authenticate_user()
     st.stop()
 
 if st.session_state["app_state"] == "home":
-    # Add whitespace between header and action buttons
-    st.markdown("<div style='height:32px;'></div>", unsafe_allow_html=True)
-    action_cols = st.columns([1,1,1,1])
-    with action_cols[0]:
-        if st.button("Start New Inspection", use_container_width=True):
-            st.session_state["app_state"] = "select_type"
-            st.rerun()
-    with action_cols[1]:
-        if st.button("Edit Existing Inspection", use_container_width=True):
-            st.session_state["app_state"] = "edit"
-            st.rerun()
-    with action_cols[2]:
-        if st.session_state.get("is_admin") and st.button("Admin Page", use_container_width=True):
-            st.session_state["app_state"] = "admin_page"
-            st.rerun()
-    with action_cols[3]:
-        if st.button("Log Out", use_container_width=True):
-            for k in ["user_email", "user_name", "user_position", "is_admin", "app_state"]:
-                if k in st.session_state:
-                    del st.session_state[k]
-            st.session_state["app_state"] = "login"
-            st.rerun()
-    app_footer()
+    inject_custom_css()
+    app_header()
+    st.markdown("<div class='app-card' style='margin-top:32px; max-width:400px; margin-left:auto; margin-right:auto;'>", unsafe_allow_html=True)
+    if st.button("Start New Inspection", use_container_width=True, key="btn_new_inspection"):
+        st.session_state["app_state"] = "select_type"
+        st.rerun()
+    if st.button("Edit Existing Inspection", use_container_width=True, key="btn_edit_inspection"):
+        st.session_state["app_state"] = "edit"
+        st.rerun()
+    if st.button("Admin Page", use_container_width=True, key="btn_admin_page"):
+        st.session_state["app_state"] = "admin_page"
+        st.rerun()
+    if st.button("View Past Inspections", use_container_width=True, key="btn_view_reports"):
+        st.session_state["app_state"] = "view_reports"
+        st.rerun()
+    if st.button("Log Out", use_container_width=True, key="btn_logout"):
+        for k in ["user_email", "user_name", "user_position", "is_admin", "app_state"]:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.session_state["app_state"] = "login"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 if st.session_state.get("app_state") == "admin_page" and st.session_state.get("is_admin"):
     st.markdown("<div style='height:32px;'></div>", unsafe_allow_html=True)
     st.markdown("# Admin Page")
@@ -556,12 +641,11 @@ if st.session_state.get("app_state") == "admin_page" and st.session_state.get("i
         submitted = st.form_submit_button("Add User")
         if submitted:
             if email and first_name and last_name and password:
-                password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
                 conn = get_conn()
                 cur = conn.cursor()
                 try:
-                    cur.execute("INSERT INTO users (email, password_hash, first_name, last_name, position, is_admin) VALUES (%s, %s, %s, %s, %s, %s)",
-                                (email, password_hash, first_name, last_name, position, is_admin))
+                    cur.execute("INSERT INTO users (email, first_name, last_name, position, is_admin) VALUES (%s, %s, %s, %s, %s)",
+                                (email, first_name, last_name, position, is_admin))
                     conn.commit()
                     st.success(f"User '{email}' added successfully.")
                 except Exception as e:
@@ -601,13 +685,8 @@ if st.session_state.get("app_state") == "admin_page" and st.session_state.get("i
                 try:
                     cur.execute("UPDATE users SET first_name = %s, last_name = %s, position = %s, is_admin = %s WHERE email = %s",
                                 (new_first_name, new_last_name, new_position, new_is_admin, email))
-                    if new_password:
-                        password_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-                        cur.execute("UPDATE users SET password_hash = %s WHERE email = %s", (password_hash, email))
                     conn.commit()
                     st.success(f"User '{email}' updated.")
-                    if new_password:
-                        st.success(f"Password reset for user '{email}'.")
                 except Exception as e:
                     st.error(f"Error updating user: {e}")
                 finally:
@@ -721,12 +800,20 @@ if st.session_state.get("app_state") == "select_type":
         st.rerun()
 elif st.session_state.get("app_state") == "new_form":
     selected_type = st.session_state.get("new_inspection_type", "Custodial")
+    # Add inspection-type-specific help text
+    if selected_type == "Custodial":
+        st.info("Custodial APPA Levels: Rate cleanliness, orderliness, and maintenance of all surfaces and fixtures. Level 1 is 'Orderly Spotlessness', Level 5 is 'Unkempt Neglect'.")
+    elif selected_type == "Maintenance":
+        st.info("Maintenance APPA Levels: Rate physical condition, safety, and functionality of building systems and spaces. Level 1 is 'Like-New Condition', Level 5 is 'Critical/Failed Condition'.")
+    elif selected_type == "Grounds":
+        st.info("Grounds APPA Levels: Rate landscaping, hardscapes, and site amenities. Level 1 is 'Excellent Condition', Level 5 is 'Neglected/Unsafe'.")
     prefill = {
         "building": "",
         "inspection_date": None,
         "inspector": "",
         "inspection_type": selected_type
     }
+    # Set checklist_data based on selected_type
     if selected_type == "Custodial":
         checklist_data = CUSTODIAL_DATA
     elif selected_type == "Maintenance":
@@ -735,8 +822,7 @@ elif st.session_state.get("app_state") == "new_form":
         checklist_data = GROUNDS_DATA
     else:
         checklist_data = CUSTODIAL_DATA
-    item_prefill = {}
-    building = prefill["building"]
+    item_prefill = {}  # Fix: define item_prefill before the form
     # Add navigation button above the form
     if st.button("Return to Main Page", key="return_home_new_form_top"):
         st.session_state["app_state"] = "home"
@@ -756,7 +842,6 @@ elif st.session_state.get("app_state") == "new_form":
                 inspector = st.selectbox("Inspector Name (Admin)", inspectors + [st.session_state.get("user_name", "")], index=(inspectors + [st.session_state.get("user_name", "")]).index(st.session_state.get("user_name", "")), key="form_inspector_admin_new")
             else:
                 user_name = st.session_state.get('user_name', None)
-                st.write(f"[DEBUG] Inspector Name: {user_name}")
                 if user_name:
                     st.markdown(f"**Inspector Name:** {user_name}")
                 else:
@@ -776,23 +861,46 @@ elif st.session_state.get("app_state") == "new_form":
                 help_key = f"{category}_{item}_help{widget_suffix}"
                 col_rating, col_help = st.columns([5,1])
                 with col_rating:
+                    rating_options = ["Select", "Level 1", "Level 2", "Level 3", "Level 4", "Level 5"]
+                    try:
+                        rating_index = rating_options.index(rating)
+                    except ValueError:
+                        rating_index = 0
                     rating_val = st.selectbox(
                         f"Rating for {item}",
-                        ["Select", "Level 1", "Level 2", "Level 3", "Level 4", "Level 5"],
-                        index=["Select", "Level 1", "Level 2", "Level 3", "Level 4", "Level 5"].index(rating),
+                        rating_options,
+                        index=rating_index,
                         key=f"{category}_{item}_rating{widget_suffix}"
                     )
                 with col_help:
                     show_help = st.form_submit_button(f"Show Help for {item}", key=help_key)
+                # Define appa_guidance inside the item loop
+                if selected_type == "Custodial":
+                    appa_guidance = {
+                        1: "Level 1: Orderly Spotlessness - Highest level, clean and well-maintained, no dust, dirt, or clutter.",
+                        2: "Level 2: Ordinary Tidiness - Clean, but may have minor dust or dirt in corners, overall tidy.",
+                        3: "Level 3: Casual Inattention - Acceptable, but more visible dust, dirt, or wear. Some clutter or minor issues.",
+                        4: "Level 4: Moderate Dinginess - Noticeable dirt, wear, or neglect. Needs attention to restore standards.",
+                        5: "Level 5: Unkempt Neglect - Major cleanliness or maintenance issues, significant dirt, damage, or clutter. Immediate action required."
+                    }
+                elif selected_type == "Maintenance":
+                    appa_guidance = {
+                        1: "Level 1: Like-New Condition - No visible wear, damage, or safety issues. All systems fully functional.",
+                        2: "Level 2: Good Condition - Minor wear, all systems functional, no major repairs needed.",
+                        3: "Level 3: Fair Condition - Noticeable wear, some minor repairs needed, but safe and usable.",
+                        4: "Level 4: Poor Condition - Significant wear, repairs needed, may impact safety or usability.",
+                        5: "Level 5: Critical/Failed Condition - Major damage, systems not functional, unsafe or unusable. Immediate action required."
+                    }
+                elif selected_type == "Grounds":
+                    appa_guidance = {
+                        1: "Level 1: Excellent Condition - Well-maintained, healthy landscaping, clean hardscapes, no litter or hazards.",
+                        2: "Level 2: Good Condition - Minor issues, overall tidy and safe.",
+                        3: "Level 3: Fair Condition - Some neglect, visible weeds, litter, or minor hazards.",
+                        4: "Level 4: Poor Condition - Significant neglect, safety concerns, major repairs needed.",
+                        5: "Level 5: Neglected/Unsafe - Major hazards, unsafe or unusable areas, immediate action required."
+                    }
                 if show_help:
                     with st.expander(f"APPA Scoring Guidance for {item}", expanded=True):
-                        appa_guidance = {
-                            1: "Level 1: Orderly Spotlessness - Highest level, clean and well-maintained, no dust, dirt, or clutter.",
-                            2: "Level 2: Ordinary Tidiness - Clean, but may have minor dust or dirt in corners, overall tidy.",
-                            3: "Level 3: Casual Inattention - Acceptable, but more visible dust, dirt, or wear. Some clutter or minor issues.",
-                            4: "Level 4: Moderate Dinginess - Noticeable dirt, wear, or neglect. Needs attention to restore standards.",
-                            5: "Level 5: Unkempt Neglect - Major cleanliness or maintenance issues, significant dirt, damage, or clutter. Immediate action required."
-                        }
                         for lvl in range(1,6):
                             st.markdown(f"**Level {lvl}:** {appa_guidance[lvl]}")
                 st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
@@ -843,7 +951,6 @@ elif st.session_state.get("app_state") == "new_form":
             st.session_state["app_state"] = "home"
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-    app_footer()
 
 if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
     # Removed blank header divs for cleaner layout
@@ -891,7 +998,6 @@ if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
                 inspector = st.selectbox("Inspector Name (Admin)", inspectors + [st.session_state.get("user_name", "")], index=(inspectors + [st.session_state.get("user_name", "")]).index(st.session_state.get("user_name", "")), key="form_inspector_admin_edit")
             else:
                 user_name = st.session_state.get('user_name', None)
-                st.write(f"[DEBUG] Inspector Name: {user_name}")
                 if user_name:
                     st.markdown(f"**Inspector Name:** {user_name}")
                 else:
@@ -902,7 +1008,6 @@ if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
         inspection_type = prefill.get("inspection_type", "Custodial")
         if inspection_type:
             inspection_type = str(inspection_type).strip().capitalize()
-        st.write(f"[DEBUG] Inspection Type: {inspection_type}")
         if inspection_type == "Custodial":
             checklist_data = CUSTODIAL_DATA
         elif inspection_type == "Maintenance":
@@ -912,28 +1017,6 @@ if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
         else:
             checklist_data = CUSTODIAL_DATA
         items_out = []
-        # Define APPA guidance for each inspection type
-        custodial_guidance = {
-            1: "Level 1: Orderly Spotlessness - Highest level, clean and well-maintained, no dust, dirt, or clutter.",
-            2: "Level 2: Ordinary Tidiness - Clean, but may have minor dust or dirt in corners, overall tidy.",
-            3: "Level 3: Casual Inattention - Acceptable, but more visible dust, dirt, or wear. Some clutter or minor issues.",
-            4: "Level 4: Moderate Dinginess - Noticeable dirt, wear, or neglect. Needs attention to restore standards.",
-            5: "Level 5: Unkempt Neglect - Major cleanliness or maintenance issues, significant dirt, damage, or clutter. Immediate action required."
-        }
-        maintenance_guidance = {
-            1: "Level 1: Fully Functional - All systems and components are in optimal working order, no repairs needed.",
-            2: "Level 2: Minor Issues - Small repairs or maintenance needed, but does not affect overall function.",
-            3: "Level 3: Noticeable Wear - Some systems/components show wear, may need attention soon.",
-            4: "Level 4: Significant Deficiency - Major repairs needed, affects function or safety.",
-            5: "Level 5: Critical Failure - System/component is non-functional or unsafe, immediate action required."
-        }
-        grounds_guidance = {
-            1: "Level 1: Pristine - Grounds are perfectly maintained, no litter, weeds, or damage.",
-            2: "Level 2: Well-kept - Minor imperfections, but overall neat and healthy.",
-            3: "Level 3: Acceptable - Some weeds, litter, or minor damage present.",
-            4: "Level 4: Neglected - Noticeable litter, weeds, or damage, needs attention.",
-            5: "Level 5: Poor Condition - Major issues with cleanliness, safety, or appearance. Immediate action required."
-        }
         for category, items in checklist_data.items():
             st.markdown(f"<div class='inspection-category' style='background: #f7f9fa; border-radius: 10px; padding: 18px 16px 8px 16px; margin-bottom: 18px; box-shadow: 0 2px 8px #e0e6ed;'>", unsafe_allow_html=True)
             st.markdown(f"<h4 style='margin-bottom: 8px; color: #2a3b4d;'>{category}</h4>", unsafe_allow_html=True)
@@ -953,13 +1036,37 @@ if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
                 with col_expander:
                     with st.expander("APPA Guidance"):
                         if inspection_type == "Custodial":
-                            guidance = custodial_guidance
+                            guidance = {
+                                1: "Level 1: Orderly Spotlessness - Highest level, clean and well-maintained, no dust, dirt, or clutter.",
+                                2: "Level 2: Ordinary Tidiness - Clean, but may have minor dust or dirt in corners, overall tidy.",
+                                3: "Level 3: Casual Inattention - Acceptable, but more visible dust, dirt, or wear. Some clutter or minor issues.",
+                                4: "Level 4: Moderate Dinginess - Noticeable dirt, wear, or neglect. Needs attention to restore standards.",
+                                5: "Level 5: Unkempt Neglect - Major cleanliness or maintenance issues, significant dirt, damage, or clutter. Immediate action required."
+                            }
                         elif inspection_type == "Maintenance":
-                            guidance = maintenance_guidance
+                            guidance = {
+                                1: "Level 1: Like-New Condition - No visible wear, damage, or safety issues. All systems fully functional.",
+                                2: "Level 2: Good Condition - Minor wear, all systems functional, no major repairs needed.",
+                                3: "Level 3: Fair Condition - Noticeable wear, some minor repairs needed, but safe and usable.",
+                                4: "Level 4: Poor Condition - Significant wear, repairs needed, may impact safety or usability.",
+                                5: "Level 5: Critical/Failed Condition - Major damage, systems not functional, unsafe or unusable. Immediate action required."
+                            }
                         elif inspection_type == "Grounds":
-                            guidance = grounds_guidance
+                            guidance = {
+                                1: "Level 1: Excellent Condition - Well-maintained, healthy landscaping, clean hardscapes, no litter or hazards.",
+                                2: "Level 2: Good Condition - Minor issues, overall tidy and safe.",
+                                3: "Level 3: Fair Condition - Some neglect, visible weeds, litter, or minor hazards.",
+                                4: "Level 4: Poor Condition - Significant neglect, safety concerns, major repairs needed.",
+                                5: "Level 5: Neglected/Unsafe - Major hazards, unsafe or unusable areas, immediate action required."
+                            }
                         else:
-                            guidance = custodial_guidance
+                            guidance = {
+                                1: "Level 1: Orderly Spotlessness - Highest level, clean and well-maintained, no dust, dirt, or clutter.",
+                                2: "Level 2: Ordinary Tidiness - Clean, but may have minor dust or dirt in corners, overall tidy.",
+                                3: "Level 3: Casual Inattention - Acceptable, but more visible dust, dirt, or wear. Some clutter or minor issues.",
+                                4: "Level 4: Moderate Dinginess - Noticeable dirt, wear, or neglect. Needs attention to restore standards.",
+                                5: "Level 5: Unkempt Neglect - Major cleanliness or maintenance issues, significant dirt, damage, or clutter. Immediate action required."
+                            }
                         for lvl in range(1,6):
                             st.markdown(f"**Level {lvl}:** {guidance[lvl]}")
                 st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
@@ -997,7 +1104,7 @@ if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
         # AI Analysis Section
         st.markdown("### 🤖 AI Analysis & APPA Assessment")
         ai_report_btn = st.form_submit_button("Generate AI Report & APPA Score")
-        submitted = st.form_submit_button("Save Inspection")
+        submitted = st.form_submit_button("Save Changes")
         if ai_report_btn:
             if not items_out:
                 st.error("Please complete some checklist items before generating a report.")
@@ -1010,6 +1117,7 @@ if st.session_state.get("app_state") == "edit_form" and edit_id is not None:
             st.markdown('<div class="ai-report-area">', unsafe_allow_html=True)
             st.markdown(st.session_state["ai_report"])
             st.markdown('</div>', unsafe_allow_html=True)
+        submitted = st.form_submit_button("Save Inspection")
         if submitted:
             data = {}
             data["building"] = building
