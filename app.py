@@ -54,7 +54,7 @@ def fetch_inspection_items(inspection_id):
     items_rows = cur.fetchall()
     items_columns = [desc[0] for desc in cur.description]
     # Fetch photos for these items
-    cur.execute("SELECT * FROM inspection_item_photos WHERE inspection_id = %s", (inspection_id,))
+    cur.execute("SELECT * FROM inspection_item_photos WHERE inspection_item_id = ANY (%s)", ([row[0] for row in items_rows],))
     photos_rows = cur.fetchall()
     photos_columns = [desc[0] for desc in cur.description]
     cur.close()
